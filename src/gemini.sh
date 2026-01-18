@@ -60,9 +60,9 @@ construct_prompt() {
                    "   - If Language is \"hinglish\", use a mix of Hindi and English. \n" +
                    "     - For \"roast\" in Hinglish: Be savage. Use Bollywood dialogues like \"Ek din tu mar jayega, kutte ki maut\", \"Ye kya bawasir bana diya?\", \"Tumse na ho payega\". Make it memorable.\n" +
                    "   - If Tone is \"friendly\", use emojis and be encouraging.\n" +
-                   "3. **New Title**: Suggest a better PR title (Conventional Commits format) if the current one is poor. If current is good, return null.\n" +
+                   "3. **New Title**: Check if the current title follows 'Conventional Commits'. If it is GOOD, return null. ONLY suggest a new title if the current one is vague, bad, or violates conventions.\n" +
                    "4. **Measurements**: Provide a Code Quality Score (1-10).\n" +
-                   "5. **New Description**: IF \"Needs Description Update\" is true, generate a comprehensive PR description (Markdown) with Summary, Changes, and Verification.\n" +
+                   "5. **New Description**: Always generate a comprehensive PR description (Markdown) with Summary, Changes, and Verification.\n" +
                    "\n" +
                    "Output valid JSON ONLY with this structure:\n" +
                    "{\n" +
