@@ -8,7 +8,8 @@ get_pr_details() {
     local repo="$1"
     local pr_num="$2"
     
-    log_info "Fetching PR #$pr_num details from $repo..."
+    local url="https://api.github.com/repos/${repo}/pulls/${pr_num}"
+    log_info "Fetching PR details from: $url"
     
     local response
     response=$(curl -s -f -H "Authorization: token ${GITHUB_TOKEN}" \

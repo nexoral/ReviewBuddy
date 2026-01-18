@@ -24,6 +24,9 @@ main() {
     local pr_json
     pr_json=$(get_pr_details "$GITHUB_REPOSITORY" "$PR_NUMBER")
 
+    # Debug Parse Error
+    log_info "Raw PR JSON: ${pr_json:0:50}..." 
+    
     local current_title
     current_title=$(echo "$pr_json" | jq -r '.title // ""')
 
