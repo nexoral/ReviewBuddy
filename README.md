@@ -1,39 +1,114 @@
 # Review Buddy AI 🤖✨
 
-**Review Buddy** is an AI-powered GitHub Action that acts as your personal pair programmer and code reviewer. It uses Google's Gemini models to analyze Pull Requests, providing constructive feedback, generating comprehensive descriptions, and suggesting better titles.
+**Review Buddy** is an intelligent, AI-powered GitHub Action that acts as your personal pair programmer. It doesn't just review your code—it **understands** it. 
 
-Depending on your mood, Review Buddy can be a **Professional Mentor** 🎓 or a **Roasting Prankster** 🤡 (great for team bonding!).
+### What does it do?
+Review Buddy automates the boring parts of Code Review:
+1.  **Code Quality & Comments**: It reviews your code line-by-line using AI to find bugs, security risks, and bad practices. (Note: It performs *static AI analysis*, it does **NOT** run your unit tests).
+2.  **Smart Metadata Updates**:
+    *   **PR Title**: Renames your PR to follow Conventional Commits (e.g., `fix: login bug` instead of `update`).
+    *   **Description**: Writes a full, formatted description (Summary, Changes, Testing Guide) if you didn't provides one.
+3.  **Engaging Feedback**: comments on your PR in your chosen tone (Professional or Roast).
+
+---
+
+## 🚀 Quick Start
+
+Copy this into `.github/workflows/review_buddy.yml`:
+
+```yaml
+name: Review Buddy
+on: [pull_request]
+permissions:
+    pull-requests: write
+    contents: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: AnkanSaha/ReviewBuddy@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+```
+
+## 💡 Why I Built This
+
+Let's be honest—writing PR descriptions is boring. We often push code with titles like "update" and leave the description empty, forcing reviewers to dig through files to guess what's happening.
+
+I built **Review Buddy** to solve this:
+*   **Context is King**: It forces every PR to have a clear, descriptive summary so reviewers know *exactly* what they are looking at immediately.
+*   **Standardization**: It enforces clean titles and robust descriptions without any manual user effort.
+*   **Fun Factor**: Code reviews can be dry. Adding a "Hinglish Roast" mode makes the process engaging and bringing the team closer together through humor.
+
+---
+
 ## 🚀 Features
 
--   **Code Quality Analysis**: Checks for bugs, security issues, and performance bottlenecks.
--   **Auto-Description**: Automatically writes a detailed PR description if yours is too short.
--   **Smart Title Suggestions**: Recommends Conventional Commit titles.
--   **Constructive Feedback**: Logical, context-aware comments.
--   **Multiple Tones**:
+-   **🔍 Deep Code Analysis**: content-aware checks for bugs, security risks, and performance bottlenecks.
+-   **📝 Auto-Documentation**: Automatically writes a detailed PR description (Summary + Changes + Testing) if the original is lacking.
+-   **🏷️ Smart Retitling**: Detects the nature of changes and renames the PR to be semantic (e.g., `fix:`, `feat:`, `chore:`).
+-   **💬 Adaptive Persona**:
     -   `roast` (Default): A fun, "senior dev" persona that playfully roasts bad code.
     -   `professional`: Helpful, clean, and mentorship-focused.
     -   `funny`: Adds humor using emojis and light jokes.
     -   `friendly`: Encouraging and kind.
--   **Multi-Language Support**:
-    -   `hinglish` (Default): A mix of Hindi and English (great for Indian dev teams!).
-    -   `english`: Standard English.
-    -   Any other language supported by Gemini.
+-   **🌐 Multi-Language Support**:
+    -   `hinglish` (Default): A mix of Hindi and English (Perfect for Indian dev teams!).
+    -   `english`: Standard Professional English.
+    -   *Any other language supported by Gemini.*
+
+---
 
 ## 🛠 Inputs
 
 | Input | Description | Required | Default |
 | :--- | :--- | :--- | :--- |
-| `github_token` | GitHub Token (usually `secrets.GITHUB_TOKEN`) | **Yes** | N/A |
+| `github_token` | GitHub Token (use `secrets.GITHUB_TOKEN`) | **Yes** | N/A |
 | `gemini_api_key` | Your Google Gemini API Key | **Yes** | N/A |
-| `tone` | The personality of the reviewer (`professional`, `funny`, `roast`, `friendly`) | No | `roast` |
-| `language` | Language of the review (e.g., `english`, `hinglish`, `hindi`) | No | `hinglish` |
-| `pr_number` | The PR number to process | No | `${{ github.event.pull_request.number }}` |
+| `tone` | The personality (`professional`, `funny`, `roast`, `friendly`) | No | `roast` |
+| `language` | Language of the review (e.g., `english`, `hinglish`) | No | `hinglish` |
+| `pr_number` | The PR number to process | No | Auto-detected |
+
+**Required Permissions**
+To function correctly, the `github_token` needs specific permissions. If using the default `GITHUB_TOKEN`, ensure your workflow YAML includes:
+
+```yaml
+permissions:
+  pull-requests: write  # Allowed to comment and update PR body/title
+  contents: read        # Allowed to read the code diff
+```
+
+### Token Permissions Guide
+
+**Option 1: Using the Default `GITHUB_TOKEN` (Recommended)**
+Simply add this permissions block to your workflow file:
+```yaml
+permissions:
+  pull-requests: write  # Allows commenting & editing PR details
+  contents: read        # Allows reading the code diff
+```
+
+**Option 2: Creating a Personal Access Token (PAT)**
+If you choose to use a PAT instead, follow these settings when creating it:
+
+*   **Classic Token**:
+    *   Check **[x] `repo`** (Full control of private repositories) or **[x] `public_repo`**.
+*   **Fine-grained Token** (More Secure):
+    *   **Repository Access**: Select target repositories.
+    *   **Permissions**:
+        *   **Pull Requests**: `Read and Write`
+        *   **Contents**: `Read-only`
+
+---
 
 ## 📦 Usage
 
-Create a workflow file in your repository (e.g., `.github/workflows/review-buddy.yml`):
+Create a workflow file in your repository at `.github/workflows/review-buddy.yml`.
 
-### Basic Example (Default: Hinglish Roast 🔥)
+### 1. Standard Configuration
+*Best for internal teams who want a mix of utility and fun.*
 
 ```yaml
 name: Review Buddy CI
@@ -58,9 +133,11 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          # Defaults: tone='roast', language='hinglish'
 ```
 
-### Professional Mode Configuration
+### 2. Professional Configuration
+*Best for open-source or strict business environments.*
 
 ```yaml
       - name: Run Review Buddy
@@ -72,19 +149,14 @@ jobs:
           language: 'english'
 ```
 
-### Handling Forked PRs (Important!)
-
-If you want this action to run on Pull Requests from **forks** (common in open source), you **MUST** use the `pull_request_target` event instead of `pull_request`.
-
-The standard `pull_request` event has a read-only token for forks, meaning Review Buddy cannot post comments or update descriptions.
-
-**Safe Configuration for Forks:**
+### 3. Handling Forked PRs (Open Source)
+**Important**: PRs from forks have read-only permissions by default. To allow Review Buddy to comment and update descriptions on forked PRs, use `pull_request_target`.
 
 ```yaml
 name: Review Buddy CI
 
 on:
-  pull_request_target: # Trigger on PRs from forks with write permission
+  pull_request_target: # Required for Fork support
     types: [opened, synchronize]
 
 permissions:
@@ -97,9 +169,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # Note: We don't strictly need to checkout code for Review Buddy to work 
-      # (since it fetches diffs via API), but it's good practice.
-
       - name: Run Review Buddy
         uses: AnkanSaha/ReviewBuddy@main
         with:
@@ -107,18 +176,25 @@ jobs:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
 ```
 
+---
+
 ## ❓ FAQ
 
-**Q: What does `@main` mean in `uses: AnkanSaha/ReviewBuddy@main`?**
-A: This tells GitHub Actions to use the version of the code currently on the `main` branch. 
-- You can use `@v1` to pin to a specific release tag (Recommended for stability).
-- You can use `@main` to always get the latest updates (Good for testing).
+**Q: Why did it change my PR Title?**
+A: Review Buddy detected that your title didn't match the content of your code (or was too generic). It uses AI to generate a Conventional Commit title so your git history remains clean.
+
+**Q: What does `@main` mean in `uses: ...@main`?**
+A: It tells GitHub Actions to use the latest version of the code from the `main` branch. For production stability, you may want to use a specific tag (e.g., `@v1.0.0`) once released.
+
+---
 
 ## ⚙️ Setup
 
-1.  **Get a Gemini API Key**: Visit [Google AI Studio](https://makersuite.google.com/) to invoke an API key.
-2.  **Add Secrets**: Go to your repository `Settings > Secrets and variables > Actions` and add `GEMINI_API_KEY`.
-3.  **Add Workflow**: Copy the usage example above into `.github/workflows/review.yml`.
+1.  **Get a Gemini API Key**: Visit [Google AI Studio](https://makersuite.google.com/) to create a free API key.
+2.  **Add Secrets**: Go to your repository **Settings > Secrets and variables > Actions** and add `GEMINI_API_KEY`.
+3.  **Add Workflow**: Copy one of the usage examples above into a new yaml file in `.github/workflows/`.
+
+---
 
 ## 📂 Project Structure
 
