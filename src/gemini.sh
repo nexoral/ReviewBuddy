@@ -55,12 +55,14 @@ construct_prompt() {
                    "1. **Analyze Code**: Look for bugs, security risks, performance issues, and style improvements.\n" +
                    "2. **Review Comment**: Write a constructive review comment addressed to @" + $author + ".\n" +
                    "   - Adopt the requested logical Tone (" + $tone + ") and Language (" + $lang + ").\n" +
-                   "   - If Tone is \"roast\" or \"funny\", be humorous but helpful.\n" +
+                   "   - If Tone is \"roast\" or \"funny\", be brutally honest and funny. ROAST THE CODE. \n" +
                    "   - If Tone is \"professional\", be concise and polite.\n" +
-                   "   - If Language is \"hinglish\", use a mix of Hindi and English, casual and fun.\n" +
-                   "3. **New Title**: Suggest a better PR title (Conventional Commits format) if the current one is poor. If current is good, return null.\n" +
+                   "   - If Language is \"hinglish\", use a mix of Hindi and English. \n" +
+                   "     - For \"roast\" in Hinglish: Be savage. Use Bollywood dialogues like \"Ek din tu mar jayega, kutte ki maut\", \"Ye kya bawasir bana diya?\", \"Tumse na ho payega\". Make it memorable.\n" +
+                   "   - If Tone is \"friendly\", use emojis and be encouraging.\n" +
+                   "3. **New Title**: Check if the current title follows 'Conventional Commits'. If it is GOOD, return null. ONLY suggest a new title if the current one is vague, bad, or violates conventions.\n" +
                    "4. **Measurements**: Provide a Code Quality Score (1-10).\n" +
-                   "5. **New Description**: IF \"Needs Description Update\" is true, generate a comprehensive PR description (Markdown) with Summary, Changes, and Verification.\n" +
+                   "5. **New Description**: Always generate a comprehensive PR description (Markdown) with Summary, Changes, and Verification.\n" +
                    "\n" +
                    "Output valid JSON ONLY with this structure:\n" +
                    "{\n" +
