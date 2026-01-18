@@ -51,7 +51,7 @@ validate_env() {
     fi
 
     if [[ -z "$PR_NUMBER" || "$PR_NUMBER" == "null" ]]; then
-        log_error "PR_NUMBER is missing. Ensure this action runs on a pull_request event."
+        log_error "PR_NUMBER is missing. Ensure this action runs on a pull_request event or provide PR_NUMBER as input."
         exit 1
     fi
 }
