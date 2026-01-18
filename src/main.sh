@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# Main Application Logic
+
+# Resolve script directory to source correctly
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+source "$SCRIPT_DIR/utils.sh"
+source "$SCRIPT_DIR/github.sh"
+source "$SCRIPT_DIR/gemini.sh"
+
+main() {
+    # 1. Initialization
+    log_info "Starting Review Buddy..."
+    check_dependencies
+    validate_env
+
+    local tone="${TONE:-roast}"
+    local language="${LANGUAGE:-hinglish}"
+    local min_desc_length=50
+
+    log_info "Configuration: Tone=$tone, Language=$language"
+
+    # 2. Fetch PR Data
+    local pr_json
+    pr_json=$(get_pr_details "$GITHUB_REPOSITORY" "$PR_NUMBER")
+
+    local current_title
+    current_title=$(echo "$pr_json" | jq -r '.title // ""')
+
+    local current_body
+    current_body=$(echo "$pr_json" | jq -r '.body // ""')
+    if [[ "$current_body" == "null" ]]; then current_body=""; fi
+
+    local pr_author
+    pr_author=$(echo "$pr_json" | jq -r '.user.login // ""')
+
+    log_info "Analyzing PR: $current_title (Author: $pr_author)"
+
+    # 3. Determine work items
+    local needs_desc_update="false"
+    if [[ "${#current_body}" -lt $min_desc_length ]]; then
+        needs_desc_update="true"
+        log_warning "Description is too short (${#current_body} chars). Marking for update."
+    fi
+
+    # 4. Fetch Diff
+    local diff
+    diff=$(get_pr_diff "$GITHUB_REPOSITORY" "$PR_NUMBER")
+    
+    if [[ -z "$diff" ]]; then
+        log_info "Diff is empty. Nothing to review."
+        exit 0
+    fi
+    
+    # Truncate diff (approx 100k chars)
+    local truncated_diff="${diff:0:100000}"
+
+    # 5. Generate AI Content
+    log_info "Generating analysis..."
+    local payload_file="gemini_payload.json"
+    local prompt
+    prompt=$(construct_prompt "$truncated_diff" "$current_title" "$pr_author" "$tone" "$language" "$needs_desc_update")
+    echo "$prompt" > "$payload_file"
+
+    local response
+    response=$(call_gemini "$GEMINI_API_KEY" "$payload_file")
+
+    if [[ -z "$response" ]]; then
+        log_error "Failed to get response from Gemini."
+        exit 1
+    fi
+
+    # 6. Parse Response
+    local generated_text
+    generated_text=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text // empty')
+    
+    # Clean JSON markdown blocks
+    local clean_json
+    clean_json=$(echo "$generated_text" | sed 's/```json//g' | sed 's/```//g')
+    
+    local review_comment
+    review_comment=$(echo "$clean_json" | jq -r '.review_comment // empty')
+    
+    local new_title
+    new_title=$(echo "$clean_json" | jq -r '.new_title // empty')
+    
+    local new_desc
+    new_desc=$(echo "$clean_json" | jq -r '.new_description // empty')
+    
+    local score
+    score=$(echo "$clean_json" | jq -r '.quality_score // 0')
+
+    log_success "Analysis Complete. Quality Score: $score/10"
+
+    # 7. Execute Actions
+    
+    # Post Comment
+    post_comment "$GITHUB_REPOSITORY" "$PR_NUMBER" "$review_comment"
+
+    # Prepare Update Payload
+    local update_json="{}"
+
+    # Update Title?
+    if [[ -n "$new_title" && "$new_title" != "null" && "$new_title" != "$current_title" ]]; then
+        log_info "Suggesting new title: $new_title"
+        update_json=$(echo "$update_json" | jq --arg t "$new_title" '. + {title: $t}')
+    fi
+
+    # Update Description?
+    if [[ "$needs_desc_update" == "true" && -n "$new_desc" && "$new_desc" != "null" ]]; then
+        log_info "Updating description..."
+        update_json=$(echo "$update_json" | jq --arg b "$new_desc" '. + {body: $b}')
+    fi
+
+    # Apply Updates
+    update_pr "$GITHUB_REPOSITORY" "$PR_NUMBER" "$update_json"
+    
+    log_success "All tasks finished."
+}
+
+# Run the main function
+main

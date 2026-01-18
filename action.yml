@@ -1,0 +1,44 @@
+name: 'Review Buddy AI'
+description: 'AI-powered PR assistant that reviews code, updates descriptions, and suggests titles using Gemini.'
+author: 'AnkanSaha'
+branding:
+  icon: 'edit'
+  color: 'blue'
+
+inputs:
+  github_token:
+    description: 'GitHub Token with write permissions for PRs'
+    required: true
+  gemini_api_key:
+    description: 'Google Gemini API Key'
+    required: true
+  pr_number:
+    description: 'Pull Request Number'
+    required: true
+    default: '${{ github.event.pull_request.number }}'
+  repository:
+    description: 'Repository name (owner/repo)'
+    required: true
+    default: '${{ github.repository }}'
+  tone:
+    description: 'Tone of the response (professional, friendly, funny, roast)'
+    required: false
+    default: 'roast'
+  language:
+    description: 'Language for the response'
+    required: false
+    default: 'hinglish'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Review Buddy
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
+        PR_NUMBER: ${{ inputs.pr_number }}
+        GITHUB_REPOSITORY: ${{ inputs.repository }}
+        TONE: ${{ inputs.tone }}
+        LANGUAGE: ${{ inputs.language }}
+      run: ${{ github.action_path }}/entrypoint.sh
