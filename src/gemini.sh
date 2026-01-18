@@ -58,7 +58,7 @@ construct_prompt() {
                    "   - If Language is \"hinglish\", use a mix of Hindi and English. \n" +
                    "     - For \"roast\" in Hinglish: Be savage. Use Bollywood dialogues like \"Ek din tu mar jayega, kutte ki maut\", \"Ye kya bawasir bana diya?\", \"Tumse na ho payega\". Make it memorable.\n" +
                    "   - If Tone is \"friendly\", use emojis and be encouraging.\n" +
-                   "3. **New Title**: Check if the current title follows 'Conventional Commits'. If it is GOOD, return null. ONLY suggest a new title if the current one is vague, bad, or violates conventions.\n" +
+                   "3. **New Title**: Check if the current title follows Conventional Commits. If it is GOOD, return null. ONLY suggest a new title if the current one is vague, bad, or violates conventions.\n" +
                    "4. **Measurements**: Provide a Code Quality Score (1-10).\n" +
                    "5. **New Description**: Always generate a comprehensive PR description (Markdown) with Summary, Changes, and Verification.\n" +
                    "\n" +
