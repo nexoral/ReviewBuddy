@@ -46,7 +46,6 @@ I built **Review Buddy** to solve this:
 
 ## 🚀 Features
 
--   **🔍 Deep Code Analysis**: content-aware checks for bugs, security risks, and performance bottlenecks.
 -   **📝 Auto-Documentation**: Automatically writes a detailed PR description (Summary + Changes + Testing) if the original is lacking.
 -   **🏷️ Smart Retitling**: Detects the nature of changes and renames the PR to be semantic (e.g., `fix:`, `feat:`, `chore:`).
 -   **💬 Adaptive Persona**:
