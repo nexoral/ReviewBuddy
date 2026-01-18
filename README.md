@@ -186,6 +186,9 @@ A: Review Buddy detected that your title didn't match the content of your code (
 **Q: What does `@main` mean in `uses: ...@main`?**
 A: It tells GitHub Actions to use the latest version of the code from the `main` branch. For production stability, you may want to use a specific tag (e.g., `@v1.0.0`) once released.
 
+**Q: Why do I need to pass `github_token`?**
+A: **Yes, it is mandatory.** Even though GitHub generates `secrets.GITHUB_TOKEN` automatically, **Composite Actions** (like this one) cannot access your secrets unless you explicitly pass them as inputs. This is a strict security boundary by GitHub. You must pass `github_token: ${{ secrets.GITHUB_TOKEN }}` so the action receives the temporary credentials needed to comment on your PR.
+
 ---
 
 ## ⚙️ Setup
