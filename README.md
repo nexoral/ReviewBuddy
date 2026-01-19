@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: AnkanSaha/ReviewBuddy@main
+      - uses: nexoral/ReviewBuddy@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
@@ -128,7 +128,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Review Buddy
-        uses: AnkanSaha/ReviewBuddy@main
+        uses: nexoral/ReviewBuddy@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
@@ -140,7 +140,7 @@ jobs:
 
 ```yaml
       - name: Run Review Buddy
-        uses: AnkanSaha/ReviewBuddy@main
+        uses: nexoral/ReviewBuddy@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
@@ -169,7 +169,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Run Review Buddy
-        uses: AnkanSaha/ReviewBuddy@main
+        uses: nexoral/ReviewBuddy@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
