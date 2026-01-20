@@ -41,36 +41,57 @@ construct_prompt() {
       --arg lang "$lang" \
       --arg needs_desc "$needs_desc" \
       '{
-        contents: [{
-          parts: [{
-            text: ("You are an expert AI code reviewer. Analyze the git diff below.\n\n" +
+        "contents": [{
+          "parts": [{
+            "text": ("You are an expert AI code reviewer. Analyze the git diff below and provide FOUR comprehensive analyses.\n\n" +
                    "Context:\n" +
                    " - PR Title: " + $title + "\n" +
                    " - Author: " + $author + "\n" +
                    " - Tone: " + $tone + "\n" +
                    " - Language: " + $lang + "\n" +
                    " - Needs Description Update: " + $needs_desc + "\n\n" +
-                   "Tasks:\n" +
-                   "1. **Analyze Code**: Look for bugs, security risks, performance issues, and style improvements.\n" +
-                   "2. **Review Comment**: Write a constructive review comment addressed to @" + $author + ".\n" +
-                   "   - Adopt the requested logical Tone (" + $tone + ") and Language (" + $lang + ").\n" +
-                   "   - If Tone is \"roast\" or \"funny\", be brutally honest and funny. ROAST THE CODE. \n" +
-                   "   - If Tone is \"professional\", be concise and polite.\n" +
-                   "   - If Language is \"hinglish\", use a mix of Hindi and English. \n" +
-                   "     - For \"roast\" in Hinglish: Be savage. Use Bollywood dialogues like \"Ek din tu mar jayega, kutte ki maut\", \"Ye kya bawasir bana diya?\", \"Tumse na ho payega\". Make it memorable.\n" +
-                   "   - If Tone is \"friendly\", use emojis and be encouraging.\n" +
-                   "3. **New Title**: Check if the current title follows Conventional Commits. If it is GOOD, return null. ONLY suggest a new title if the current one is vague, bad, or violates conventions.\n" +
-                   "4. **Measurements**: Provide a Code Quality Score (1-10).\n" +
-                   "5. **New Description**: Always generate a comprehensive PR description (Markdown) with Summary, Changes, and Verification.\n" +
-                   "\n" +
-                   "Output valid JSON ONLY with this structure:\n" +
+                   "IMPORTANT: ALL responses (general, performance, security, quality) MUST use the same Tone (" + $tone + ") and Language (" + $lang + ") as specified.\n\n" +
+                   "Tone Guidelines:\n" +
+                   " - If Tone is \"roast\" or \"funny\", be brutally honest and funny in ALL sections. ROAST THE CODE.\n" +
+                   " - If Tone is \"professional\", be concise and polite in ALL sections.\n" +
+                   " - If Language is \"hinglish\", use a mix of Hindi and English in ALL sections.\n" +
+                   "   - For \"roast\" in Hinglish: Be savage. Use Bollywood dialogues like \"Ek din tu mar jayega, kutte ki maut\", \"Ye kya bawasir bana diya?\", \"Tumse na ho payega\".\n" +
+                   " - If Tone is \"friendly\", use emojis and be encouraging in ALL sections.\n\n" +
+                   "Tasks:\n\n" +
+                   "1. **General Review Comment**: Write a constructive review comment addressed to @" + $author + ".\n" +
+                   "   - Analyze for bugs, general improvements, and style issues.\n" +
+                   "   - Use the specified Tone and Language.\n" +
+                   "   - Provide a Code Quality Score (1-10).\n\n" +
+                   "2. **Performance Analysis** (100+ lines): Conduct a DEEP performance analysis.\n" +
+                   "   - Use the same Tone and Language as above.\n" +
+                   "   - Review: Algorithm complexity, Memory usage, Database queries, Caching, Async patterns, Loop optimizations, N+1 problems, Connection pooling, CPU operations, Concurrency.\n" +
+                   "   - Provide DETAILED, ACTIONABLE recommendations with code examples.\n" +
+                   "   - Make this comprehensive and over 100 lines.\n\n" +
+                   "3. **Security Audit**: Conduct a COMPREHENSIVE security audit.\n" +
+                   "   - Use the same Tone and Language as above.\n" +
+                   "   - Analyze for: SQL Injection, XSS, CSRF, Auth/Authorization, Input validation, Secrets exposure, Session management, API security, Path traversal, Command injection, Rate limiting, CORS.\n" +
+                   "   - For each issue: Severity (Critical/High/Medium/Low), Location, Exploit scenario, Remediation steps, OWASP/CWE references.\n" +
+                   "   - Be thorough and educational.\n\n" +
+                   "4. **Code Quality Analysis** (100+ lines): Provide an EXTENSIVE quality review.\n" +
+                   "   - Use the same Tone and Language as above.\n" +
+                   "   - Analyze: SOLID principles, Design patterns, DRY, Function complexity, Naming conventions, Code clarity, Error handling, Testing, Documentation, Code smells, Technical debt.\n" +
+                   "   - For each issue: Category, Severity, Location, Explanation, Refactoring suggestions with examples.\n" +
+                   "   - Be EXTREMELY detailed (100+ lines).\n\n" +
+                   "5. **PR Metadata**:\n" +
+                   "   - Check if the current title follows Conventional Commits. If GOOD, return null. ONLY suggest a new title if it is vague or violates conventions.\n" +
+                   "   - Generate a comprehensive PR description (Markdown) with Summary, Changes, and Verification.\n\n" +
+                   "CRITICAL: You MUST respond with ONLY valid JSON. Do not include markdown code blocks (no ```json```) or extra text.\n\n" +
+                   "Output JSON with this EXACT structure:\n" +
                    "{\n" +
-                   "  \"review_comment\": \"string (markdown)\",\n" +
-                   "  \"new_title\": \"string or null\",\n" +
-                   "  \"new_description\": \"string or null\",\n" +
-                   "  \"quality_score\": number\n" +
+                   "  \"review_comment\": \"<markdown string>\",\n" +
+                   "  \"performance_analysis\": \"<markdown string - 100+ lines>\",\n" +
+                   "  \"security_analysis\": \"<markdown string - comprehensive>\",\n" +
+                   "  \"quality_analysis\": \"<markdown string - 100+ lines>\",\n" +
+                   "  \"new_title\": \"<string or null>\",\n" +
+                   "  \"new_description\": \"<markdown string or null>\",\n" +
+                   "  \"quality_score\": <number 1-10>\n" +
                    "}\n\n" +
-                   "Diff:\n" + $diff)
+                   "Diff to analyze:\n" + $diff)
           }]
         }]
       }'
