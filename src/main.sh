@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Main Application Logic
+# TODO: Add more features
 
 # Resolve script directory to source correctly
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
