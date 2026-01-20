@@ -80,6 +80,10 @@ construct_prompt() {
                    "5. **PR Metadata**:\n" +
                    "   - Check if the current title follows Conventional Commits. If GOOD, return null. ONLY suggest a new title if it is vague or violates conventions.\n" +
                    "   - Generate a comprehensive PR description (Markdown) with Summary, Changes, and Verification.\n\n" +
+                   "6. **Overall Benchmark Score (0-100)**: Calculate a comprehensive maintainability score.\n" +
+                   "   - Weigh all factors: Code Quality (30%), Security (25%), Performance (25%), Maintainability (20%).\n" +
+                   "   - Scoring: 90-100 Excellent, 70-89 Good, 50-69 Needs Improvement, 0-49 Poor.\n" +
+                   "   - Be strict but fair in scoring.\n\n" +
                    "CRITICAL: You MUST respond with ONLY valid JSON. Do not include markdown code blocks (no ```json```) or extra text.\n\n" +
                    "Output JSON with this EXACT structure:\n" +
                    "{\n" +
@@ -89,7 +93,8 @@ construct_prompt() {
                    "  \"quality_analysis\": \"<markdown string - 100+ lines>\",\n" +
                    "  \"new_title\": \"<string or null>\",\n" +
                    "  \"new_description\": \"<markdown string or null>\",\n" +
-                   "  \"quality_score\": <number 1-10>\n" +
+                   "  \"quality_score\": <number 1-10>,\n" +
+                   "  \"maintainability_score\": <number 0-100>\n" +
                    "}\n\n" +
                    "Diff to analyze:\n" + $diff)
           }]
