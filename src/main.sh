@@ -114,7 +114,10 @@ main() {
     local score
     score=$(echo "$clean_json" | jq -r '.quality_score // 0')
 
-    log_success "Analysis Complete. Quality Score: $score/10"
+    local maintainability_score
+    maintainability_score=$(echo "$clean_json" | jq -r '.maintainability_score // 0')
+
+    log_success "Analysis Complete. Quality Score: $score/10 | Overall Benchmark: $maintainability_score/100"
 
     # 7. Execute Actions in Order (All analyses from SINGLE API call with same tone & language)
     
@@ -210,9 +213,21 @@ $security_analysis
             mentions="$mentions $reviewer_mentions"
         fi
         
+        # Determine score badge color/label
+        local score_label="Poor"
+        if [[ "$maintainability_score" -ge 90 ]]; then
+            score_label="Excellent"
+        elif [[ "$maintainability_score" -ge 70 ]]; then
+            score_label="Good"
+        elif [[ "$maintainability_score" -ge 50 ]]; then
+            score_label="Needs Improvement"
+        fi
+
         local quality_comment="<!-- Review Buddy Quality -->
 ## 📊 Review Buddy - Code Quality & Maintainability Analysis
 > 👥 **Attention:** $mentions
+
+### 🎯 Overall Benchmark: **$maintainability_score/100** ($score_label)
 
 $quality_analysis
 
