@@ -34,6 +34,20 @@ main() {
     local pr_author
     pr_author=$(echo "$pr_json" | jq -r '.user.login // ""')
 
+    # Extract reviewers (requested_reviewers)
+    local reviewers_list
+    reviewers_list=$(echo "$pr_json" | jq -r '.requested_reviewers[]?.login // empty' | tr '\n' ' ')
+    
+    # Build mentions string for reviewers
+    local reviewer_mentions=""
+    if [[ -n "$reviewers_list" ]]; then
+        for reviewer in $reviewers_list; do
+            reviewer_mentions="$reviewer_mentions @$reviewer"
+        done
+        reviewer_mentions=$(echo "$reviewer_mentions" | xargs)  # trim whitespace
+        log_info "Reviewers: $reviewer_mentions"
+    fi
+
     log_info "Analyzing PR: $current_title (Author: $pr_author)"
 
     # 3. Determine work items
@@ -126,9 +140,17 @@ main() {
     # STEP 2: Post General Changes Review Comment
     log_info "Step 2: Posting general changes review..."
     if [[ -n "$review_comment" && "$review_comment" != "null" ]]; then
-        # Add Review Buddy Branding
+        # Build mention line for author and reviewers
+        local mentions="@$pr_author"
+        if [[ -n "$reviewer_mentions" ]]; then
+            mentions="$mentions $reviewer_mentions"
+        fi
+        
+        # Add Review Buddy Branding with mentions
         local branded_comment="<!-- Review Buddy Start -->
 ## 🤖 Review Buddy - General Code Review
+> 👥 **Attention:** $mentions
+
 $review_comment
 
 ---
@@ -140,8 +162,16 @@ $review_comment
     # STEP 3: Post Performance Analysis (from same API call)
     log_info "Step 3: Posting performance analysis..."
     if [[ -n "$performance_analysis" && "$performance_analysis" != "null" ]]; then
+        # Build mention line
+        local mentions="@$pr_author"
+        if [[ -n "$reviewer_mentions" ]]; then
+            mentions="$mentions $reviewer_mentions"
+        fi
+        
         local perf_comment="<!-- Review Buddy Performance -->
 ## ⚡ Review Buddy - Performance Analysis
+> 👥 **Attention:** $mentions
+
 $performance_analysis
 
 ---
@@ -153,8 +183,16 @@ $performance_analysis
     # STEP 4: Post Security Analysis (from same API call)
     log_info "Step 4: Posting security audit..."
     if [[ -n "$security_analysis" && "$security_analysis" != "null" ]]; then
+        # Build mention line
+        local mentions="@$pr_author"
+        if [[ -n "$reviewer_mentions" ]]; then
+            mentions="$mentions $reviewer_mentions"
+        fi
+        
         local sec_comment="<!-- Review Buddy Security -->
 ## 🔐 Review Buddy - Security Audit
+> 👥 **Attention:** $mentions
+
 $security_analysis
 
 ---
@@ -166,8 +204,16 @@ $security_analysis
     # STEP 5: Post Code Quality Analysis (from same API call)
     log_info "Step 5: Posting code quality analysis..."
     if [[ -n "$quality_analysis" && "$quality_analysis" != "null" ]]; then
+        # Build mention line
+        local mentions="@$pr_author"
+        if [[ -n "$reviewer_mentions" ]]; then
+            mentions="$mentions $reviewer_mentions"
+        fi
+        
         local quality_comment="<!-- Review Buddy Quality -->
 ## 📊 Review Buddy - Code Quality & Maintainability Analysis
+> 👥 **Attention:** $mentions
+
 $quality_analysis
 
 ---
