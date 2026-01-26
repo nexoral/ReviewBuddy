@@ -14,7 +14,6 @@ Review Buddy automates the boring parts of Code Review:
 3.  **Engaging Feedback**: comments on your PR in your chosen tone (Professional or Roast).
 4.  **Final Recommendation**: Provides a clear recommendation (Approve/Request Changes/Reject) with actionable next steps for reviewers.
 5.  **Interactive Chat**: Reply to any comment with `/Buddy` (e.g., "Why is this wrong? /Buddy") and Review Buddy will explain!
-6.  **Smart Conditional Reviews**: Automatically skips auto-review if your PR Title and Description are already sufficient (saving you API tokens and noise).
 
 ---
 
