@@ -99,9 +99,9 @@ handle_pull_request() {
     local clean_json
     # Attempt to extract JSON from markdown code block
     if echo "$generated_text" | grep -q "```json"; then
-        clean_json=$(echo "$generated_text" | sed -n '/```json/,/```/p' | sed 's/```json//g' | sed 's/```//g')
+        clean_json=$(echo "$generated_text" | awk '/```json/{flag=1; next} /```/{flag=0} flag')
     elif echo "$generated_text" | grep -q "```"; then
-        clean_json=$(echo "$generated_text" | sed -n '/```/,/```/p' | sed 's/```//g')
+        clean_json=$(echo "$generated_text" | awk '/```/{if (flag) flag=0; else flag=1; next} flag')
     else
         # Fallback: Extract from first '{' to last '}'
         clean_json=$(echo "$generated_text" | awk '/{/{p=1} p; /}/{if (p) exit}' | tac | awk '/}/{p=1} p; /{/{if (p) exit}' | tac)
@@ -418,6 +418,7 @@ handle_issue_comment() {
         
         # Override global PR_NUMBER for fetching details
         PR_NUMBER="$issue_number"
+        log_info "Processing Comment for PR #$PR_NUMBER"
 
         # Fetch PR Details for context
         local pr_json
@@ -459,7 +460,9 @@ handle_issue_comment() {
         reply_text=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text // empty')
 
         if [[ -n "$reply_text" ]]; then
-            post_comment "$GITHUB_REPOSITORY" "$PR_NUMBER" "$reply_text"
+            # Prepend mention to ensure the user is notified
+            local final_reply="@$comment_author $reply_text"
+            post_comment "$GITHUB_REPOSITORY" "$PR_NUMBER" "$final_reply"
             log_success "Replied to user comment."
         else
             log_error "Empty response from Gemini."
