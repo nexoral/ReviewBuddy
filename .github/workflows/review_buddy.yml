@@ -1,5 +1,9 @@
 name: Review Buddy
-on: [pull_request]
+on:
+  pull_request:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
 permissions:
     pull-requests: write
     contents: read
