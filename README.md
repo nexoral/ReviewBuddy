@@ -10,6 +10,7 @@ Review Buddy automates the boring parts of Code Review:
     *   **Description**: Writes a full, formatted description (Summary, Changes, Testing Guide) if you didn't provides one.
     *   **Labels**: Automatically adds relevant labels based on change type, quality score, and detected issues.
 3.  **Engaging Feedback**: comments on your PR in your chosen tone (Professional or Roast).
+4.  **Final Recommendation**: Provides a clear recommendation (Approve/Request Changes/Reject) with actionable next steps for reviewers.
 
 ---
 
@@ -41,6 +42,7 @@ Let's be honest—writing PR descriptions is boring. We often push code with tit
 I built **Review Buddy** to solve this:
 *   **Context is King**: It forces every PR to have a clear, descriptive summary so reviewers know *exactly* what they are looking at immediately.
 *   **Standardization**: It enforces clean titles and robust descriptions without any manual user effort.
+*   **Decision Support**: Reviewers no longer have to wonder "should I approve this?" - Review Buddy provides clear, data-driven recommendations.
 *   **Fun Factor**: Code reviews can be dry. Adding a "Hinglish Roast" mode makes the process engaging and bringing the team closer together through humor.
 
 ---
@@ -54,6 +56,11 @@ I built **Review Buddy** to solve this:
     -   **Quality Score**: `good first review` (90+), `needs work` (<50)
     -   **Security Concerns**: `security` (if Critical/High issues detected)
     -   **Performance Issues**: `performance` (if optimization opportunities found)
+-   **🎯 Smart PR Recommendations**: Posts a final recommendation comment with:
+    -   **✅ APPROVE**: High quality code (80+), no critical issues - ready to merge
+    -   **⚠️ REQUEST CHANGES**: Medium quality (40-79) or some concerns - needs improvements
+    -   **🚫 REJECT**: Critical security issues or very low quality (<40) - major fixes required
+    -   Includes reasoning, review checklist, and clear next steps for reviewers
 -   **💬 Adaptive Persona**:
     -   `roast` (Default): A fun, "senior dev" persona that playfully roasts bad code.
     -   `professional`: Helpful, clean, and mentorship-focused.
@@ -201,6 +208,14 @@ A: Review Buddy will gracefully skip labels that don't exist. To use this featur
 - `enhancement`, `bug`, `documentation`, `testing`, `maintenance`
 - `good first review`, `needs work`
 - `security`, `performance`
+
+**Q: How does Review Buddy decide whether to recommend Approve, Request Changes, or Reject?**
+A: Review Buddy uses an intelligent decision algorithm based on multiple factors:
+- **REJECT**: If critical security issues are detected OR quality score is below 40/100
+- **REQUEST CHANGES**: If high-severity security issues exist OR quality score is 40-59/100
+- **APPROVE**: If quality score is 60+/100 and no critical/high security issues
+
+The recommendation is posted as a final comment with detailed reasoning and next steps.
 
 **Q: What does `@main` mean in `uses: ...@main`?**
 A: It tells GitHub Actions to use the latest version of the code from the `main` branch. For production stability, you may want to use a specific tag (e.g., `@v1.0.0`) once released.
