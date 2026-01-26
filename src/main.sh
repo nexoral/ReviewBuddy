@@ -111,7 +111,14 @@ handle_pull_request() {
     
     # Clean JSON markdown blocks
     local clean_json
-    clean_json=$(echo "$generated_text" | sed 's/```json//g' | sed 's/```//g')
+    # Attempt to extract JSON from markdown code block
+    if echo "$generated_text" | grep -q "```json"; then
+        clean_json=$(echo "$generated_text" | sed -n '/```json/,/```/p' | sed 's/```json//g' | sed 's/```//g')
+    elif echo "$generated_text" | grep -q "```"; then
+        clean_json=$(echo "$generated_text" | sed -n '/```/,/```/p' | sed 's/```//g')
+    else
+        clean_json="$generated_text"
+    fi
     
     # Parse all analyses from single API response
     local review_comment
