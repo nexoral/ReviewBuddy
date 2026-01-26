@@ -52,24 +52,10 @@ handle_pull_request() {
 
     log_info "Analyzing PR: $current_title (Author: $pr_author)"
 
-    # --- CONDITIONAL SKIP LOGIC ---
-    # "feature if title os short or Description is short then only api call other wise skip it"
-    # Interpreted: Run auto-review ONLY IF (title is short OR description is short)
-    # So if Title is Long AND Description is Long -> SKIP.
+    # --- CONDITIONAL SKIP LOGIC REMOVED ---
+    # Auto-Review now triggers for ALL PRs regardless of description length.
+    log_info "Auto-Review Triggered: Analyzing PR..."
 
-    # Check lengths
-    local title_len=${#current_title}
-    local body_len=${#current_body}
-    
-    # Thresholds: Short Title < 15, Short Description < 50
-    if [[ $title_len -ge $min_title_length && $body_len -ge $min_desc_length ]]; then
-        log_info "Skipping Auto-Review: PR Title ($title_len chars) and Description ($body_len chars) are sufficient."
-        log_info "To trigger a review manually, you can shorten the description or title."
-        exit 0
-    else
-        log_info "Auto-Review Triggered: Title or Description is too short."
-    fi
-    # -----------------------------
 
     # 3. Determine work items
     local needs_desc_update="false"
