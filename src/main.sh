@@ -9,15 +9,16 @@ source "$SCRIPT_DIR/utils.sh"
 source "$SCRIPT_DIR/github.sh"
 source "$SCRIPT_DIR/gemini.sh"
 
-main() {
+handle_pull_request() {
     # 1. Initialization
-    log_info "Starting Review Buddy..."
+    log_info "Starting Review Buddy (PR Mode)..."
     check_dependencies
     validate_env
 
     local tone="${TONE:-roast}"
     local language="${LANGUAGE:-hinglish}"
     local min_desc_length=50
+    local min_title_length=15 # Define threshold for "short" title
 
     log_info "Configuration: Tone=$tone, Language=$language"
 
@@ -50,6 +51,25 @@ main() {
     fi
 
     log_info "Analyzing PR: $current_title (Author: $pr_author)"
+
+    # --- CONDITIONAL SKIP LOGIC ---
+    # "feature if title os short or Description is short then only api call other wise skip it"
+    # Interpreted: Run auto-review ONLY IF (title is short OR description is short)
+    # So if Title is Long AND Description is Long -> SKIP.
+
+    # Check lengths
+    local title_len=${#current_title}
+    local body_len=${#current_body}
+    
+    # Thresholds: Short Title < 15, Short Description < 50
+    if [[ $title_len -ge $min_title_length && $body_len -ge $min_desc_length ]]; then
+        log_info "Skipping Auto-Review: PR Title ($title_len chars) and Description ($body_len chars) are sufficient."
+        log_info "To trigger a review manually, you can shorten the description or title."
+        exit 0
+    else
+        log_info "Auto-Review Triggered: Title or Description is too short."
+    fi
+    # -----------------------------
 
     # 3. Determine work items
     local needs_desc_update="false"
@@ -91,7 +111,14 @@ main() {
     
     # Clean JSON markdown blocks
     local clean_json
-    clean_json=$(echo "$generated_text" | sed 's/```json//g' | sed 's/```//g')
+    # Attempt to extract JSON from markdown code block
+    if echo "$generated_text" | grep -q "```json"; then
+        clean_json=$(echo "$generated_text" | sed -n '/```json/,/```/p' | sed 's/```json//g' | sed 's/```//g')
+    elif echo "$generated_text" | grep -q "```"; then
+        clean_json=$(echo "$generated_text" | sed -n '/```/,/```/p' | sed 's/```//g')
+    else
+        clean_json="$generated_text"
+    fi
     
     # Parse all analyses from single API response
     local review_comment
@@ -336,6 +363,118 @@ $rec_reasoning
     log_info "Summary: SINGLE API call → PR updated + 4 specialized comments + final recommendation posted + labels assigned"
     log_info "Final Recommendation: $rec_status"
     log_info "All analyses used: Tone=$tone, Language=$language"
+}
+
+handle_issue_comment() {
+    log_info "Starting Review Buddy (Comment Reply Mode)..."
+    check_dependencies
+    validate_env
+
+    local tone="${TONE:-roast}"
+    local language="${LANGUAGE:-hinglish}"
+
+    # Read Event Payload to find comment
+    if [[ ! -f "$GITHUB_EVENT_PATH" ]]; then
+        log_error "Event payload not found at $GITHUB_EVENT_PATH"
+        exit 1
+    fi
+
+    # Extract comment info using jq
+    local comment_body
+    comment_body=$(jq -r '.comment.body // ""' "$GITHUB_EVENT_PATH")
+    
+    local comment_author
+    comment_author=$(jq -r '.comment.user.login // ""' "$GITHUB_EVENT_PATH")
+
+    # Extract PR number from issue payload (it's called 'issue' even for PR comments)
+    local issue_number
+    issue_number=$(jq -r '.issue.number // empty' "$GITHUB_EVENT_PATH")
+    
+    if [[ -z "$issue_number" ]]; then
+        log_warning "Could not find issue number in payload. Exiting."
+        exit 0
+    fi
+    
+    # Verify it is a PR
+    local is_pr
+    is_pr=$(jq -r '.issue.pull_request // empty' "$GITHUB_EVENT_PATH")
+    if [[ -z "$is_pr" ]]; then
+        log_info "This comment is not on a Pull Request. Skipping."
+        exit 0
+    fi
+
+    # Check for /Buddy or /buddy command
+    if echo "$comment_body" | grep -qiE "/buddy"; then
+        log_info "Command '/Buddy' detected in comment by @$comment_author."
+        
+        # Override global PR_NUMBER for fetching details
+        PR_NUMBER="$issue_number"
+
+        # Fetch PR Details for context
+        local pr_json
+        pr_json=$(get_pr_details "$GITHUB_REPOSITORY" "$PR_NUMBER")
+        
+        local current_title
+        current_title=$(echo "$pr_json" | jq -r '.title // ""')
+        
+        local pr_author
+        pr_author=$(echo "$pr_json" | jq -r '.user.login // ""')
+
+        # Fetch Diff for Context
+        local diff
+        diff=$(get_pr_diff "$GITHUB_REPOSITORY" "$PR_NUMBER")
+        
+        if [[ -z "$diff" ]]; then
+            log_warning "Diff is empty. Proceeding without diff context."
+            diff="No diff available."
+        fi
+        local truncated_diff="${diff:0:50000}" # Smaller diff context for chat
+
+        # Generate Reply
+        log_info "Generating reply..."
+        local payload_file="gemini_chat_payload.json"
+        
+        local prompt
+        prompt=$(construct_chat_prompt "$truncated_diff" "$current_title" "$pr_author" "$comment_body" "$comment_author" "$tone" "$language")
+        echo "$prompt" > "$payload_file"
+
+        local response
+        response=$(call_gemini "$GEMINI_API_KEY" "$payload_file")
+
+        if [[ -z "$response" ]]; then
+            log_error "Failed to get response from Gemini."
+            exit 1
+        fi
+
+        local reply_text
+        reply_text=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text // empty')
+
+        if [[ -n "$reply_text" ]]; then
+            post_comment "$GITHUB_REPOSITORY" "$PR_NUMBER" "$reply_text"
+            log_success "Replied to user comment."
+        else
+            log_error "Empty response from Gemini."
+        fi
+
+    else
+        log_info "No '/Buddy' command found. Skipping."
+        exit 0
+    fi
+}
+
+main() {
+    log_info "GitHub Event Name: $GITHUB_EVENT_NAME"
+
+    if [[ "$GITHUB_EVENT_NAME" == "pull_request" || "$GITHUB_EVENT_NAME" == "pull_request_target" ]]; then
+        handle_pull_request
+    elif [[ "$GITHUB_EVENT_NAME" == "issue_comment" ]]; then
+        handle_issue_comment
+    else
+        log_warning "Unsupported event: $GITHUB_EVENT_NAME"
+        # Optional: Fail or just exit success to not break workflow?
+        # Exit success to allow other jobs to continue if any
+        exit 0
+    fi
 }
 
 # Run the main function

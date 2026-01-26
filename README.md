@@ -11,6 +11,8 @@ Review Buddy automates the boring parts of Code Review:
     *   **Labels**: Automatically adds relevant labels based on change type, quality score, and detected issues.
 3.  **Engaging Feedback**: comments on your PR in your chosen tone (Professional or Roast).
 4.  **Final Recommendation**: Provides a clear recommendation (Approve/Request Changes/Reject) with actionable next steps for reviewers.
+5.  **Interactive Chat**: Reply to any comment with `/Buddy` (e.g., "Why is this wrong? /Buddy") and Review Buddy will explain!
+6.  **Smart Conditional Reviews**: Automatically skips auto-review if your PR Title and Description are already sufficient (saving you API tokens and noise).
 
 ---
 
@@ -20,7 +22,11 @@ Copy this into `.github/workflows/review_buddy.yml`:
 
 ```yaml
 name: Review Buddy
-on: [pull_request]
+on:
+  pull_request:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
 permissions:
     pull-requests: write
     contents: read
@@ -35,6 +41,8 @@ jobs:
 ```
 
 > **💰 Cost-Efficient**: Review Buddy makes only **ONE** Gemini API call per PR (using `gemini-2.0-flash-exp`) to generate the complete review report (code analysis, suggestions, description, labels, and recommendation). No expensive multi-call workflows—just fast, affordable AI reviews!
+>
+> **🚀 Simple & Smart**: Just add one Gemini API key with a small config file, and your Repo PR becomes smarter!
 
 ## 💡 Why I Built This
 
@@ -129,6 +137,8 @@ name: Review Buddy CI
 on:
   pull_request:
     types: [opened, synchronize]
+  issue_comment:
+    types: [created]
 
 permissions:
   pull-requests: write

@@ -101,3 +101,45 @@ construct_prompt() {
         }]
       }'
 }
+
+construct_chat_prompt() {
+    local diff="$1"
+    local title="$2"
+    local author="$3"
+    local comment="$4"
+    local comment_author="$5"
+    local tone="$6"
+    local lang="$7"
+
+    jq -n \
+      --arg diff "$diff" \
+      --arg title "$title" \
+      --arg author "$author" \
+      --arg comment "$comment" \
+      --arg comment_author "$comment_author" \
+      --arg tone "$tone" \
+      --arg lang "$lang" \
+      '{
+        "contents": [{
+          "parts": [{
+            "text": ("You are Review Buddy, an expert AI code reviewer. You are replying to a comment on a Pull Request.\n\n" +
+                   "Context:\n" +
+                   " - PR Title: " + $title + "\n" +
+                   " - PR Author: " + $author + "\n" +
+                   " - Comment Author: " + $comment_author + "\n" +
+                   " - User Question/Comment: " + $comment + "\n" +
+                   " - Tone: " + $tone + "\n" +
+                   " - Language: " + $lang + "\n\n" +
+                   "Instructions:\n" +
+                   "1. Analyze the User'\''s comment in the context of the PR Diff provided below.\n" +
+                   "2. Answer their question, justify the code, or explain the issue clearly.\n" +
+                   "3. Use the specified Tone and Language.\n" +
+                   "   - If Tone is \"roast\", be savage but helpful.\n" +
+                   "   - If Language is \"hinglish\", use Hinglish.\n" +
+                   "4. Provide code examples if needed.\n" +
+                   "5. Keep the response concise but informative.\n\n" +
+                   "Diff Context:\n" + $diff)
+          }]
+        }]
+      }'
+}
