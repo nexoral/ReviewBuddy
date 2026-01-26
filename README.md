@@ -35,6 +35,8 @@ jobs:
 ```
 
 > **💰 Cost-Efficient**: Review Buddy makes only **ONE** Gemini API call per PR (using `gemini-2.0-flash-exp`) to generate the complete review report (code analysis, suggestions, description, labels, and recommendation). No expensive multi-call workflows—just fast, affordable AI reviews!
+>
+> **🚀 Simple & Smart**: Just add one Gemini API key with a small config file, and your Repo PR becomes smarter!
 
 ## 💡 Why I Built This
 
