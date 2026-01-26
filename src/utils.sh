@@ -55,3 +55,45 @@ validate_env() {
         exit 1
     fi
 }
+
+determine_labels() {
+    local title="$1"
+    local maintainability_score="$2"
+    local security_analysis="$3"
+    local performance_analysis="$4"
+    local labels=()
+
+    # Extract change type from Conventional Commit title
+    if [[ "$title" =~ ^(feat|feature)(\(.*\))?:.*$ ]]; then
+        labels+=("enhancement")
+    elif [[ "$title" =~ ^(fix|bugfix)(\(.*\))?:.*$ ]]; then
+        labels+=("bug")
+    elif [[ "$title" =~ ^(docs?)(\(.*\))?:.*$ ]]; then
+        labels+=("documentation")
+    elif [[ "$title" =~ ^(refactor|perf|performance)(\(.*\))?:.*$ ]]; then
+        labels+=("enhancement")
+    elif [[ "$title" =~ ^(test|tests)(\(.*\))?:.*$ ]]; then
+        labels+=("testing")
+    elif [[ "$title" =~ ^(chore|ci|build)(\(.*\))?:.*$ ]]; then
+        labels+=("maintenance")
+    fi
+
+    # Add quality-based labels
+    if [[ "$maintainability_score" -ge 90 ]]; then
+        labels+=("good first review")
+    elif [[ "$maintainability_score" -lt 50 ]]; then
+        labels+=("needs work")
+    fi
+
+    # Check for security concerns
+    if [[ "$security_analysis" == *"Critical"* ]] || [[ "$security_analysis" == *"High"* ]]; then
+        labels+=("security")
+    fi
+
+    # Check for performance concerns
+    if [[ "$performance_analysis" == *"performance issue"* ]] || [[ "$performance_analysis" == *"optimize"* ]] || [[ "$performance_analysis" == *"slow"* ]]; then
+        labels+=("performance")
+    fi
+
+    echo "${labels[@]}"
+}

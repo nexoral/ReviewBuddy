@@ -8,6 +8,7 @@ Review Buddy automates the boring parts of Code Review:
 2.  **Smart Metadata Updates**:
     *   **PR Title**: Renames your PR to follow Conventional Commits (e.g., `fix: login bug` instead of `update`).
     *   **Description**: Writes a full, formatted description (Summary, Changes, Testing Guide) if you didn't provides one.
+    *   **Labels**: Automatically adds relevant labels based on change type, quality score, and detected issues.
 3.  **Engaging Feedback**: comments on your PR in your chosen tone (Professional or Roast).
 
 ---
@@ -48,6 +49,11 @@ I built **Review Buddy** to solve this:
 
 -   **📝 Auto-Documentation**: Automatically writes a detailed PR description (Summary + Changes + Testing) if the original is lacking.
 -   **🏷️ Smart Retitling**: Detects the nature of changes and renames the PR to be semantic (e.g., `fix:`, `feat:`, `chore:`).
+-   **🏷️ Intelligent Label Management**: Automatically adds relevant labels based on:
+    -   **Change Type**: `enhancement` (feat), `bug` (fix), `documentation` (docs), `testing` (test), `maintenance` (chore/ci/build)
+    -   **Quality Score**: `good first review` (90+), `needs work` (<50)
+    -   **Security Concerns**: `security` (if Critical/High issues detected)
+    -   **Performance Issues**: `performance` (if optimization opportunities found)
 -   **💬 Adaptive Persona**:
     -   `roast` (Default): A fun, "senior dev" persona that playfully roasts bad code.
     -   `professional`: Helpful, clean, and mentorship-focused.
@@ -181,6 +187,20 @@ jobs:
 
 **Q: Why did it change my PR Title?**
 A: Review Buddy detected that your title didn't match the content of your code (or was too generic). It uses AI to generate a Conventional Commit title so your git history remains clean.
+
+**Q: What labels does Review Buddy add automatically?**
+A: Review Buddy intelligently adds labels based on the PR analysis:
+- **Change Type**: `enhancement`, `bug`, `documentation`, `testing`, `maintenance`
+- **Quality**: `good first review` (high quality), `needs work` (low quality)
+- **Concerns**: `security`, `performance`
+
+Note: Labels must already exist in your repository. Review Buddy will skip labels that don't exist.
+
+**Q: What if the labels don't exist in my repository?**
+A: Review Buddy will gracefully skip labels that don't exist. To use this feature fully, create the following labels in your repository:
+- `enhancement`, `bug`, `documentation`, `testing`, `maintenance`
+- `good first review`, `needs work`
+- `security`, `performance`
 
 **Q: What does `@main` mean in `uses: ...@main`?**
 A: It tells GitHub Actions to use the latest version of the code from the `main` branch. For production stability, you may want to use a specific tag (e.g., `@v1.0.0`) once released.
