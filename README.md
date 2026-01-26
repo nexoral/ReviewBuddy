@@ -21,7 +21,7 @@ Copy this into `.github/workflows/review_buddy.yml`:
 ```yaml
 name: Review Buddy
 on:
-  pull_request_target: # Required for Fork support
+  pull_request_target:
     types: [opened, synchronize]
 permissions:
   pull-requests: write

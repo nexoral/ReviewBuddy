@@ -1,0 +1,124 @@
+name: Auto Release on Version Bump
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  check-version-and-release:
+    # Only run if PR was merged
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR branch (merged code)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Read new version from PR
+        id: new_version
+        run: |
+          if [ -f VERSION ]; then
+            NEW_VERSION=$(cat VERSION | tr -d '[:space:]')
+            echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "New version: $NEW_VERSION"
+          else
+            echo "VERSION file not found"
+            exit 1
+          fi
+
+      - name: Fetch main branch previous commit
+        run: |
+          git fetch origin main
+
+      - name: Read old version from main (before merge)
+        id: old_version
+        run: |
+          # Get the version from the commit before the merge
+          OLD_VERSION=$(git show HEAD~1:VERSION 2>/dev/null | tr -d '[:space:]' || echo "v0.0")
+          echo "version=$OLD_VERSION" >> $GITHUB_OUTPUT
+          echo "Old version: $OLD_VERSION"
+
+      - name: Compare versions
+        id: compare
+        run: |
+          NEW="${{ steps.new_version.outputs.version }}"
+          OLD="${{ steps.old_version.outputs.version }}"
+
+          # Remove 'v' prefix for comparison
+          NEW_NUM="${NEW#v}"
+          OLD_NUM="${OLD#v}"
+
+          echo "Comparing: $NEW vs $OLD"
+
+          # Simple version comparison (works for formats like v1.0, v2.0, v3.0)
+          if [ "$NEW_NUM" != "$OLD_NUM" ]; then
+            # Check if new version is greater (basic comparison)
+            if [ "$(printf '%s\n' "$OLD_NUM" "$NEW_NUM" | sort -V | tail -n1)" = "$NEW_NUM" ] && [ "$NEW_NUM" != "$OLD_NUM" ]; then
+              echo "should_release=true" >> $GITHUB_OUTPUT
+              echo "Version bumped from $OLD to $NEW - will create release"
+            else
+              echo "should_release=false" >> $GITHUB_OUTPUT
+              echo "Version $NEW is not greater than $OLD - skipping release"
+            fi
+          else
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "Version unchanged - skipping release"
+          fi
+
+      - name: Create Release
+        if: steps.compare.outputs.should_release == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.new_version.outputs.version }}
+          name: Release ${{ steps.new_version.outputs.version }}
+          body: |
+            ## Release ${{ steps.new_version.outputs.version }}
+
+            This release was automatically created based on the VERSION file update.
+
+            ### Changes
+            See the merged PR: #${{ github.event.pull_request.number }}
+
+            **Previous Version:** ${{ steps.old_version.outputs.version }}
+            **New Version:** ${{ steps.new_version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
+      - name: Clean up old releases (keep last 3)
+        if: steps.compare.outputs.should_release == 'true'
+        run: |
+          # Get all releases sorted by creation date (newest first)
+          echo "Fetching all releases..."
+          RELEASES=$(gh release list --limit 100 --json tagName,createdAt | jq -r '.[] | "\(.createdAt)\t\(.tagName)"' | sort -r)
+
+          # Count total releases
+          TOTAL_RELEASES=$(echo "$RELEASES" | wc -l)
+          echo "Total releases: $TOTAL_RELEASES"
+
+          # If more than 3 releases exist, delete the old ones
+          if [ "$TOTAL_RELEASES" -gt 3 ]; then
+            echo "Keeping latest 3 releases, deleting older ones..."
+
+            # Get releases to delete (skip first 3, delete rest)
+            RELEASES_TO_DELETE=$(echo "$RELEASES" | tail -n +4 | awk '{print $2}')
+
+            for TAG in $RELEASES_TO_DELETE; do
+              echo "Deleting release and tag: $TAG"
+              gh release delete "$TAG" --yes || echo "Failed to delete release $TAG"
+              git push origin --delete "$TAG" || echo "Failed to delete tag $TAG"
+            done
+
+            echo "Cleanup completed!"
+          else
+            echo "Only $TOTAL_RELEASES releases exist. No cleanup needed."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
