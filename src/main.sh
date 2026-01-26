@@ -418,6 +418,7 @@ handle_issue_comment() {
         
         # Override global PR_NUMBER for fetching details
         PR_NUMBER="$issue_number"
+        log_info "Processing Comment for PR #$PR_NUMBER"
 
         # Fetch PR Details for context
         local pr_json
