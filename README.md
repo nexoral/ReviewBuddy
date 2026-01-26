@@ -1,5 +1,7 @@
 # Review Buddy AI 🤖✨
 
+> **🆕 New Feature:** You can now **CHAT** with Review Buddy! Just reply to any comment with `/buddy` to ask questions or debate the review. 💬
+
 **Review Buddy** is an intelligent, AI-powered GitHub Action that acts as your personal pair programmer. It doesn't just review your code—it **understands** it. 
 
 ### What does it do?
