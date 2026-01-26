@@ -99,9 +99,9 @@ handle_pull_request() {
     local clean_json
     # Attempt to extract JSON from markdown code block
     if echo "$generated_text" | grep -q "```json"; then
-        clean_json=$(echo "$generated_text" | sed -n '/```json/,/```/p' | sed 's/```json//g' | sed 's/```//g')
+        clean_json=$(echo "$generated_text" | awk '/```json/{flag=1; next} /```/{flag=0} flag')
     elif echo "$generated_text" | grep -q "```"; then
-        clean_json=$(echo "$generated_text" | sed -n '/```/,/```/p' | sed 's/```//g')
+        clean_json=$(echo "$generated_text" | awk '/```/{if (flag) flag=0; else flag=1; next} flag')
     else
         # Fallback: Extract from first '{' to last '}'
         clean_json=$(echo "$generated_text" | awk '/{/{p=1} p; /}/{if (p) exit}' | tac | awk '/}/{p=1} p; /{/{if (p) exit}' | tac)
