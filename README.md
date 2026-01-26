@@ -20,10 +20,12 @@ Copy this into `.github/workflows/review_buddy.yml`:
 
 ```yaml
 name: Review Buddy
-on: [pull_request]
+on:
+  pull_request_target:
+    types: [opened, synchronize]
 permissions:
-    pull-requests: write
-    contents: read
+  pull-requests: write
+  contents: read
 jobs:
   review:
     runs-on: ubuntu-latest
@@ -31,6 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: nexoral/ReviewBuddy@main
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
 ```
 
