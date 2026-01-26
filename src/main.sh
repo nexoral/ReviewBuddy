@@ -460,7 +460,9 @@ handle_issue_comment() {
         reply_text=$(echo "$response" | jq -r '.candidates[0].content.parts[0].text // empty')
 
         if [[ -n "$reply_text" ]]; then
-            post_comment "$GITHUB_REPOSITORY" "$PR_NUMBER" "$reply_text"
+            # Prepend mention to ensure the user is notified
+            local final_reply="@$comment_author $reply_text"
+            post_comment "$GITHUB_REPOSITORY" "$PR_NUMBER" "$final_reply"
             log_success "Replied to user comment."
         else
             log_error "Empty response from Gemini."
