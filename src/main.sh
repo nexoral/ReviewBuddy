@@ -103,9 +103,26 @@ handle_pull_request() {
     elif echo "$generated_text" | grep -q "```"; then
         clean_json=$(echo "$generated_text" | sed -n '/```/,/```/p' | sed 's/```//g')
     else
-        clean_json="$generated_text"
+        # Fallback: Extract from first '{' to last '}'
+        clean_json=$(echo "$generated_text" | awk '/{/{p=1} p; /}/{if (p) exit}' | tac | awk '/}/{p=1} p; /{/{if (p) exit}' | tac)
+        # The above awk/tac combo is risky for multi-line JSON. 
+        # Simpler approach: use sed to find range from first { to last }.
+        # But 'last }' is hard in stream. 
+        # reliable method:
+        clean_json=$(echo "$generated_text" | sed -n '/{/,/}/p')
     fi
     
+    # Validate JSON before parsing
+    if ! echo "$clean_json" | jq empty > /dev/null 2>&1; then
+        log_warning "Failed to parse JSON response. Raw output: $generated_text"
+        # Try one last desperate attempt: just the content between obvious curly braces if sed failed
+        clean_json=$(echo "$generated_text" | grep -o '{.*}' | head -n 1) 
+        if ! echo "$clean_json" | jq empty > /dev/null 2>&1; then
+             log_error "Critical: JSON parsing failed completely."
+             exit 1
+        fi
+    fi
+
     # Parse all analyses from single API response
     local review_comment
     review_comment=$(echo "$clean_json" | jq -r '.review_comment // empty')
@@ -118,7 +135,7 @@ handle_pull_request() {
     
     local quality_analysis
     quality_analysis=$(echo "$clean_json" | jq -r '.quality_analysis // empty')
-    
+
     local new_title
     new_title=$(echo "$clean_json" | jq -r '.new_title // empty')
     
@@ -354,10 +371,16 @@ $rec_reasoning
 handle_issue_comment() {
     log_info "Starting Review Buddy (Comment Reply Mode)..."
     check_dependencies
-    validate_env
-
+    # validate_env called LATER after extracting PR_NUMBER
+    
     local tone="${TONE:-roast}"
     local language="${LANGUAGE:-hinglish}"
+
+    # Pre-check API keys
+    if [[ -z "$GEMINI_API_KEY" || -z "$GITHUB_TOKEN" ]]; then
+       log_error "GEMINI_API_KEY or GITHUB_TOKEN is missing."
+       exit 1
+    fi
 
     # Read Event Payload to find comment
     if [[ ! -f "$GITHUB_EVENT_PATH" ]]; then
