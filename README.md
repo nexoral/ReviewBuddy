@@ -20,10 +20,12 @@ Copy this into `.github/workflows/review_buddy.yml`:
 
 ```yaml
 name: Review Buddy
-on: [pull_request]
+on:
+  pull_request_target: # Required for Fork support
+    types: [opened, synchronize]
 permissions:
-    pull-requests: write
-    contents: read
+  pull-requests: write
+  contents: read
 jobs:
   review:
     runs-on: ubuntu-latest
@@ -34,6 +36,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
 ```
+
+> **💰 Cost-Efficient**: Review Buddy makes only **ONE** Gemini API call per PR (using `gemini-2.0-flash-exp`) to generate the complete review report (code analysis, suggestions, description, labels, and recommendation). No expensive multi-call workflows—just fast, affordable AI reviews!
 
 ## 💡 Why I Built This
 
