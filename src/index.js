@@ -285,7 +285,7 @@ async function handleIssueComment(env) {
   logInfo("Starting Review Buddy (Comment Reply Mode)...");
 
   // Validate keys specifically for this flow
-  if ((!env.GEMINI_API_KEY && !process.env.INPUT_GEMINI_API_KEY) || (!env.GITHUB_TOKEN && !process.env.INPUT_GITHUB_TOKEN)) {
+  if (!env.GEMINI_API_KEY || !env.GITHUB_TOKEN) {
     logError("GEMINI_API_KEY or GITHUB_TOKEN is missing.");
     process.exit(1);
   }
@@ -374,13 +374,13 @@ async function main() {
   // We already passed them in handlePullRequest from process.env, but let's formalize.
 
   const env = {
-    GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY || process.env.INPUT_REPOSITORY,
+    GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY,
     GITHUB_EVENT_NAME: process.env.GITHUB_EVENT_NAME,
-    GITHUB_TOKEN: process.env.GITHUB_TOKEN || process.env.INPUT_GITHUB_TOKEN,
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.INPUT_GEMINI_API_KEY,
-    PR_NUMBER: process.env.PR_NUMBER || process.env.INPUT_PR_NUMBER,
-    TONE: process.env.TONE || process.env.INPUT_TONE,
-    LANGUAGE: process.env.LANGUAGE || process.env.INPUT_LANGUAGE
+    GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    PR_NUMBER: process.env.PR_NUMBER,
+    TONE: process.env.TONE,
+    LANGUAGE: process.env.LANGUAGE
   };
 
   logInfo(`GitHub Event Name: ${env.GITHUB_EVENT_NAME}`);
