@@ -36,10 +36,10 @@ runs:
     - name: Run Review Buddy
       shell: bash
       env:
-        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
-        INPUT_GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
-        INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
+        PR_NUMBER: ${{ inputs.pr_number }}
         GITHUB_REPOSITORY: ${{ inputs.repository }}
-        INPUT_TONE: ${{ inputs.tone }}
-        INPUT_LANGUAGE: ${{ inputs.language }}
+        TONE: ${{ inputs.tone }}
+        LANGUAGE: ${{ inputs.language }}
       run: node ${{ github.action_path }}/src/index.js

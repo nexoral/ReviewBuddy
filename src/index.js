@@ -13,27 +13,44 @@ const {
   fetchPRDetails, fetchPRDiff, postComment, updatePR, addLabels
 } = require('./github');
 
+function getVersion() {
+  try {
+    const versionPath = path.join(__dirname, '../VERSION');
+    if (fs.existsSync(versionPath)) {
+      return fs.readFileSync(versionPath, 'utf8').trim();
+    }
+  } catch (e) {
+    // ignore
+  }
+  return 'unknown';
+}
+
 async function handlePullRequest(env) {
   logInfo("Starting Review Buddy (PR Mode)...");
 
+  const appVersion = getVersion();
+  logInfo(`App Version: ${appVersion}`);
+  logInfo(`Node.js Version: ${process.version}`);
+  logInfo(`Platform: ${process.platform}`);
+
   const {
     GITHUB_REPOSITORY,
-    INPUT_PR_NUMBER,
-    INPUT_GITHUB_TOKEN,
-    INPUT_GEMINI_API_KEY,
-    INPUT_TONE,
-    INPUT_LANGUAGE
+    PR_NUMBER,
+    GITHUB_TOKEN,
+    GEMINI_API_KEY,
+    TONE,
+    LANGUAGE
   } = env;
 
   // Use input PR number or fallback to event payload if needed (though action.yml passes it)
-  const prNumber = INPUT_PR_NUMBER;
-  const tone = INPUT_TONE || 'roast';
-  const language = INPUT_LANGUAGE || 'hinglish';
+  const prNumber = PR_NUMBER;
+  const tone = TONE || 'roast';
+  const language = LANGUAGE || 'hinglish';
 
   logInfo(`Configuration: Tone=${tone}, Language=${language}`);
 
   // Fetch PR Data
-  const prJson = await fetchPRDetails(GITHUB_REPOSITORY, prNumber, INPUT_GITHUB_TOKEN);
+  const prJson = await fetchPRDetails(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN);
   const currentTitle = prJson.title || "";
   const currentBody = prJson.body || "";
   const prAuthor = prJson.user ? prJson.user.login : "";
@@ -55,7 +72,7 @@ async function handlePullRequest(env) {
   }
 
   // Fetch Diff
-  const diff = await fetchPRDiff(GITHUB_REPOSITORY, prNumber, INPUT_GITHUB_TOKEN);
+  const diff = await fetchPRDiff(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN);
   if (!diff) {
     logInfo("Diff is empty. Nothing to review.");
     process.exit(0);
@@ -67,7 +84,7 @@ async function handlePullRequest(env) {
   logInfo("Generating analysis...");
 
   const promptPayload = constructPrompt(truncatedDiff, currentTitle, prAuthor, tone, language, String(needsDescUpdate));
-  const response = await callGemini(INPUT_GEMINI_API_KEY, promptPayload);
+  const response = await callGemini(GEMINI_API_KEY, promptPayload);
 
   if (!response) {
     logError("Failed to get response from Gemini.");
@@ -138,7 +155,7 @@ async function handlePullRequest(env) {
     updatePayload.body = new_description;
   }
 
-  await updatePR(GITHUB_REPOSITORY, prNumber, updatePayload, INPUT_GITHUB_TOKEN);
+  await updatePR(GITHUB_REPOSITORY, prNumber, updatePayload, GITHUB_TOKEN);
 
   // Helper to build mentions
   const buildMentions = () => {
@@ -158,7 +175,7 @@ async function handlePullRequest(env) {
 
 ${review_comment}
 ${footer}`;
-    await postComment(GITHUB_REPOSITORY, prNumber, comment, INPUT_GITHUB_TOKEN);
+    await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
   }
 
   // Step 3: Performance
@@ -170,7 +187,7 @@ ${footer}`;
 
 ${performance_analysis}
 ${footer}`;
-    await postComment(GITHUB_REPOSITORY, prNumber, comment, INPUT_GITHUB_TOKEN);
+    await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
   }
 
   // Step 4: Security
@@ -182,7 +199,7 @@ ${footer}`;
 
 ${security_analysis}
 ${footer}`;
-    await postComment(GITHUB_REPOSITORY, prNumber, comment, INPUT_GITHUB_TOKEN);
+    await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
   }
 
   // Step 5: Quality
@@ -201,7 +218,7 @@ ${footer}`;
 
 ${quality_analysis}
 ${footer}`;
-    await postComment(GITHUB_REPOSITORY, prNumber, comment, INPUT_GITHUB_TOKEN);
+    await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
   }
 
   // Step 6: Smart Labels
@@ -210,7 +227,7 @@ ${footer}`;
   const labelsToAdd = determineLabels(finalTitle, mScore, security_analysis, performance_analysis);
 
   if (labelsToAdd.length > 0) {
-    await addLabels(GITHUB_REPOSITORY, prNumber, labelsToAdd, INPUT_GITHUB_TOKEN);
+    await addLabels(GITHUB_REPOSITORY, prNumber, labelsToAdd, GITHUB_TOKEN);
   } else {
     logInfo("No labels to add.");
   }
@@ -259,7 +276,7 @@ ${recData.reasoning}
   }
 
   recComment += footer;
-  await postComment(GITHUB_REPOSITORY, prNumber, recComment, INPUT_GITHUB_TOKEN);
+  await postComment(GITHUB_REPOSITORY, prNumber, recComment, GITHUB_TOKEN);
 
   logSuccess("All tasks finished successfully!");
 }
@@ -268,7 +285,7 @@ async function handleIssueComment(env) {
   logInfo("Starting Review Buddy (Comment Reply Mode)...");
 
   // Validate keys specifically for this flow
-  if (!env.INPUT_GEMINI_API_KEY || !env.INPUT_GITHUB_TOKEN) {
+  if ((!env.GEMINI_API_KEY && !process.env.INPUT_GEMINI_API_KEY) || (!env.GITHUB_TOKEN && !process.env.INPUT_GITHUB_TOKEN)) {
     logError("GEMINI_API_KEY or GITHUB_TOKEN is missing.");
     process.exit(1);
   }
@@ -310,22 +327,22 @@ async function handleIssueComment(env) {
   const prNumber = issueNumber;
   const {
     GITHUB_REPOSITORY,
-    INPUT_GITHUB_TOKEN,
-    INPUT_GEMINI_API_KEY,
-    INPUT_TONE,
-    INPUT_LANGUAGE
+    GITHUB_TOKEN,
+    GEMINI_API_KEY,
+    TONE,
+    LANGUAGE
   } = env;
 
-  const tone = INPUT_TONE || 'roast';
-  const language = INPUT_LANGUAGE || 'hinglish';
+  const tone = TONE || 'roast';
+  const language = LANGUAGE || 'hinglish';
 
   // Fetch PR Details
-  const prJson = await fetchPRDetails(GITHUB_REPOSITORY, prNumber, INPUT_GITHUB_TOKEN);
+  const prJson = await fetchPRDetails(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN);
   const currentTitle = prJson.title || "";
   const prAuthor = prJson.user ? prJson.user.login : "";
 
   // Fetch Diff
-  let diff = await fetchPRDiff(GITHUB_REPOSITORY, prNumber, INPUT_GITHUB_TOKEN);
+  let diff = await fetchPRDiff(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN);
   if (!diff) {
     logWarning("Diff is empty. Proceeding without diff context.");
     diff = "No diff available.";
@@ -335,7 +352,7 @@ async function handleIssueComment(env) {
   // Generate Reply
   logInfo("Generating reply...");
   const promptPayload = constructChatPrompt(truncatedDiff, currentTitle, prAuthor, commentBody, commentAuthor, tone, language);
-  const response = await callGemini(INPUT_GEMINI_API_KEY, promptPayload);
+  const response = await callGemini(GEMINI_API_KEY, promptPayload);
 
   if (!response) {
     logError("Failed to get response from Gemini.");
@@ -345,7 +362,7 @@ async function handleIssueComment(env) {
   const replyText = response.candidates?.[0]?.content?.parts?.[0]?.text;
   if (replyText) {
     const finalReply = `@${commentAuthor} ${replyText}`;
-    await postComment(GITHUB_REPOSITORY, prNumber, finalReply, INPUT_GITHUB_TOKEN);
+    await postComment(GITHUB_REPOSITORY, prNumber, finalReply, GITHUB_TOKEN);
     logSuccess("Replied to user comment.");
   } else {
     logError("Empty response from Gemini.");
@@ -357,16 +374,22 @@ async function main() {
   // We already passed them in handlePullRequest from process.env, but let's formalize.
 
   const env = {
-    GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY,
+    GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY || process.env.INPUT_REPOSITORY,
     GITHUB_EVENT_NAME: process.env.GITHUB_EVENT_NAME,
-    INPUT_GITHUB_TOKEN: process.env.INPUT_GITHUB_TOKEN, // mapped from inputs.github_token
-    INPUT_GEMINI_API_KEY: process.env.INPUT_GEMINI_API_KEY, // mapped from inputs.gemini_api_key
-    INPUT_PR_NUMBER: process.env.INPUT_PR_NUMBER, // mapped from inputs.pr_number
-    INPUT_TONE: process.env.INPUT_TONE,
-    INPUT_LANGUAGE: process.env.INPUT_LANGUAGE
+    GITHUB_TOKEN: process.env.GITHUB_TOKEN || process.env.INPUT_GITHUB_TOKEN,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.INPUT_GEMINI_API_KEY,
+    PR_NUMBER: process.env.PR_NUMBER || process.env.INPUT_PR_NUMBER,
+    TONE: process.env.TONE || process.env.INPUT_TONE,
+    LANGUAGE: process.env.LANGUAGE || process.env.INPUT_LANGUAGE
   };
 
   logInfo(`GitHub Event Name: ${env.GITHUB_EVENT_NAME}`);
+
+  // Meaningful Logs
+  const actionVersion = getVersion();
+  logInfo(`ReviewBuddy Version: ${actionVersion}`);
+  logInfo(`Node.js Version: ${process.version}`);
+  logInfo(`Platform: ${process.platform} (${process.arch})`);
 
   if (env.GITHUB_EVENT_NAME === 'pull_request' || env.GITHUB_EVENT_NAME === 'pull_request_target') {
     validateEnv(); // Checks KEYS
