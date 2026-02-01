@@ -13,8 +13,25 @@ const {
   fetchPRDetails, fetchPRDiff, postComment, updatePR, addLabels
 } = require('./github');
 
+function getVersion() {
+  try {
+    const versionPath = path.join(__dirname, '../VERSION');
+    if (fs.existsSync(versionPath)) {
+      return fs.readFileSync(versionPath, 'utf8').trim();
+    }
+  } catch (e) {
+    // ignore
+  }
+  return 'unknown';
+}
+
 async function handlePullRequest(env) {
   logInfo("Starting Review Buddy (PR Mode)...");
+
+  const appVersion = getVersion();
+  logInfo(`App Version: ${appVersion}`);
+  logInfo(`Node.js Version: ${process.version}`);
+  logInfo(`Platform: ${process.platform}`);
 
   const {
     GITHUB_REPOSITORY,
@@ -367,6 +384,12 @@ async function main() {
   };
 
   logInfo(`GitHub Event Name: ${env.GITHUB_EVENT_NAME}`);
+
+  // Meaningful Logs
+  const actionVersion = getVersion();
+  logInfo(`ReviewBuddy Version: ${actionVersion}`);
+  logInfo(`Node.js Version: ${process.version}`);
+  logInfo(`Platform: ${process.platform} (${process.arch})`);
 
   if (env.GITHUB_EVENT_NAME === 'pull_request' || env.GITHUB_EVENT_NAME === 'pull_request_target') {
     validateEnv(); // Checks KEYS
