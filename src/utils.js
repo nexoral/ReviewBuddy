@@ -20,8 +20,9 @@ const logError = (msg) => console.error(`${COLORS.RED}[ERROR]${COLORS.RESET} ${m
  * @returns {object} The validated environment variables.
  */
 function validateEnv() {
-  const required = ['GEMINI_API_KEY', 'GITHUB_TOKEN'];
-  const missing = required.filter(key => !process.env[key]);
+  const missing = [];
+  if (!process.env.GEMINI_API_KEY && !process.env.INPUT_GEMINI_API_KEY) missing.push('GEMINI_API_KEY');
+  if (!process.env.GITHUB_TOKEN && !process.env.INPUT_GITHUB_TOKEN) missing.push('GITHUB_TOKEN');
 
   if (missing.length > 0) {
     logError(`Missing required environment variables: ${missing.join(', ')}`);
