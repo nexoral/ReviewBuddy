@@ -195,6 +195,11 @@ jobs:
 ### 4. OpenRouter Configuration
 *Use any model via OpenRouter (Claude, GPT, Llama, Mistral, etc.).*
 
+> **⚠️ Important - Model Selection:**
+> - **Recommended models**: `anthropic/claude-3.5-sonnet`, `google/gemini-2.0-flash-exp:free`, `openai/gpt-4o-mini`, `meta-llama/llama-3.3-70b-instruct`
+> - **Avoid very small models** (< 7B parameters) like `liquid/lfm-2.5-1.2b-instruct:free` - they cannot follow complex JSON structures and will produce broken output
+> - Small models may return `[object Object]` errors, shallow reviews, and fail to update PR titles/descriptions
+
 ```yaml
       - name: Run Review Buddy
         uses: nexoral/ReviewBuddy@main
