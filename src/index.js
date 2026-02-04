@@ -134,6 +134,9 @@ async function handlePullRequest(env, adapter, apiKey, model) {
     process.exit(1);
   }
 
+  logInfo(`✅ AI Response Length: ${generatedText.length} characters`);
+  logInfo(`📄 Response Preview: ${generatedText.substring(0, 200)}...`);
+
   // Parse Response
   const cleanJsonStr = extractJson(generatedText);
 
@@ -147,7 +150,10 @@ async function handlePullRequest(env, adapter, apiKey, model) {
   }
 
   // Debug: Log the parsed structure
-  logInfo(`Parsed response keys: ${Object.keys(analysisResults).join(', ')}`);
+  logInfo(`🔍 Parsed Keys: ${Object.keys(analysisResults).join(', ')}`);
+  logInfo(`🔍 Field Types: review=${typeof analysisResults.review_comment}, perf=${typeof analysisResults.performance_analysis}, sec=${typeof analysisResults.security_analysis}, qual=${typeof analysisResults.quality_analysis}`);
+  logInfo(`📝 Title Type/Value: ${typeof analysisResults.new_title} = ${analysisResults.new_title === null ? 'null' : analysisResults.new_title === undefined ? 'undefined' : `"${analysisResults.new_title}"`}`);
+  logInfo(`📝 Description Type: ${typeof analysisResults.new_description} = ${analysisResults.new_description === null ? 'null' : analysisResults.new_description === undefined ? 'undefined' : `${String(analysisResults.new_description).substring(0, 100)}...`}`);
 
   const {
     review_comment,
@@ -189,9 +195,11 @@ async function handlePullRequest(env, adapter, apiKey, model) {
   const score = quality_score || 0;
   const mScore = maintainability_score || 0;
 
-  // Debug: Log title/description status
-  logInfo(`Title update: ${new_title ? `"${new_title}"` : 'null'}`);
-  logInfo(`Description update: ${new_description ? `${new_description.length} chars` : 'null'}`);
+  // Debug: Log title/description status BEFORE cleaning
+  logInfo(`RAW Title from AI: ${new_title === null ? 'null' : new_title === undefined ? 'undefined' : `"${new_title}"`}`);
+  logInfo(`RAW Description from AI: ${new_description === null ? 'null' : new_description === undefined ? 'undefined' : `${String(new_description).length} chars`}`);
+  logInfo(`Current PR Title: "${currentTitle}"`);
+  logInfo(`Needs Desc Update flag: ${needsDescUpdate}`);
 
   logSuccess(`Analysis Complete. Quality Score: ${score}/10 | Overall Benchmark: ${mScore}/100`);
 
