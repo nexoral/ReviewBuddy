@@ -10,7 +10,8 @@ const {
   callGemini, constructPrompt, constructChatPrompt
 } = require('./gemini');
 const {
-  fetchPRDetails, fetchPRDiff, postComment, updatePR, addLabels
+  fetchPRDetails, fetchPRDiff, postComment, updatePR, addLabels,
+  fetchPRComments, updateComment
 } = require('./github');
 
 function getVersion() {
@@ -131,7 +132,8 @@ async function handlePullRequest(env) {
     new_title,
     new_description,
     quality_score,
-    maintainability_score
+    maintainability_score,
+    verdict
   } = analysisResults;
 
   const score = quality_score || 0;
@@ -234,7 +236,7 @@ ${footer}`;
 
   // Step 7: Final Recommendation
   logInfo("Step 7: Posting final recommendation...");
-  const recData = determineRecommendation(mScore, score, security_analysis, performance_analysis, tone, language);
+  const recData = determineRecommendation(mScore, score, security_analysis, performance_analysis, tone, language, verdict);
 
   let recComment = `<!-- Review Buddy Recommendation -->
 ## ${recData.icon} Review Buddy - Final Recommendation
@@ -313,12 +315,9 @@ async function handleIssueComment(env) {
   }
 
   // Check for /buddy command
-  if (!/^\/buddy/i.test(commentBody)) { // Regex check for starting with /buddy (case insensitive) or contains it? Original grep was just recursive check.
-    // Original: echo "$comment_body" | grep -qiE "/buddy"
-    if (!/\/buddy/i.test(commentBody)) {
-      logInfo("No '/Buddy' command found. Skipping.");
-      process.exit(0);
-    }
+  if (!/\/buddy/i.test(commentBody)) {
+    logInfo("No '/Buddy' command found. Skipping.");
+    process.exit(0);
   }
 
   logInfo(`Command '/Buddy' detected in comment by @${commentAuthor}.`);
@@ -349,9 +348,57 @@ async function handleIssueComment(env) {
   }
   const truncatedDiff = diff.substring(0, 50000);
 
-  // Generate Reply
-  logInfo("Generating reply...");
-  const promptPayload = constructChatPrompt(truncatedDiff, currentTitle, prAuthor, commentBody, commentAuthor, tone, language);
+  // Fetch all PR comments for conversation context
+  logInfo("Fetching conversation history...");
+  const allComments = await fetchPRComments(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN);
+
+  // Build conversation history string and find the recommendation comment
+  let conversationHistory = "";
+  let recommendationCommentId = null;
+  let recommendationCommentBody = null;
+  let currentVerdict = null;
+
+  for (const c of allComments) {
+    const body = c.body || "";
+    const author = c.user?.login || "unknown";
+
+    // Track the recommendation comment for potential update
+    if (body.includes("<!-- Review Buddy Recommendation -->")) {
+      recommendationCommentId = c.id;
+      recommendationCommentBody = body;
+
+      // Extract current verdict status from the comment
+      const statusMatch = body.match(/### Recommendation: \*\*(.+?)\*\*/);
+      const reasoningMatch = body.match(/### Reasoning:\n([\s\S]*?)(?=\n---|\n###)/);
+      if (statusMatch) {
+        currentVerdict = {
+          status: statusMatch[1],
+          reasoning: reasoningMatch ? reasoningMatch[1].trim() : ""
+        };
+      }
+    }
+
+    // Build conversation history (truncate individual comments to keep context manageable)
+    const truncatedBody = body.length > 2000 ? body.substring(0, 2000) + "..." : body;
+    conversationHistory += `---\n**@${author}:**\n${truncatedBody}\n\n`;
+  }
+
+  // Truncate total conversation history to avoid exceeding token limits
+  if (conversationHistory.length > 30000) {
+    conversationHistory = conversationHistory.substring(conversationHistory.length - 30000);
+  }
+
+  logInfo(`Found ${allComments.length} comments. Recommendation comment ${recommendationCommentId ? 'found' : 'not found'}.`);
+  if (currentVerdict) {
+    logInfo(`Current verdict: ${currentVerdict.status}`);
+  }
+
+  // Generate Reply with full context
+  logInfo("Generating context-aware reply...");
+  const promptPayload = constructChatPrompt(
+    truncatedDiff, currentTitle, prAuthor, commentBody, commentAuthor,
+    tone, language, conversationHistory, currentVerdict
+  );
   const response = await callGemini(GEMINI_API_KEY, promptPayload);
 
   if (!response) {
@@ -359,14 +406,127 @@ async function handleIssueComment(env) {
     process.exit(1);
   }
 
-  const replyText = response.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (replyText) {
-    const finalReply = `@${commentAuthor} ${replyText}`;
-    await postComment(GITHUB_REPOSITORY, prNumber, finalReply, GITHUB_TOKEN);
-    logSuccess("Replied to user comment.");
-  } else {
+  const generatedText = response.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!generatedText) {
     logError("Empty response from Gemini.");
+    process.exit(1);
   }
+
+  // Parse the JSON response
+  let parsedResponse;
+  try {
+    let cleanJson = generatedText;
+    const jsonMatch = generatedText.match(/```json\n([\s\S]*?)\n```/) || generatedText.match(/```\n([\s\S]*?)\n```/);
+    if (jsonMatch) {
+      cleanJson = jsonMatch[1];
+    } else {
+      const firstBrace = generatedText.indexOf('{');
+      const lastBrace = generatedText.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        cleanJson = generatedText.substring(firstBrace, lastBrace + 1);
+      }
+    }
+    parsedResponse = JSON.parse(cleanJson);
+  } catch (e) {
+    // Fallback: treat the entire response as plain text reply (backwards compatible)
+    logWarning(`Could not parse structured response, using as plain text: ${e.message}`);
+    parsedResponse = { reply: generatedText, verdict_changed: false, updated_verdict: null };
+  }
+
+  const replyText = parsedResponse.reply || generatedText;
+  const verdictChanged = parsedResponse.verdict_changed === true;
+  const updatedVerdict = parsedResponse.updated_verdict;
+
+  // Post the reply
+  const footer = `\n---\n*Generated by [Review Buddy](https://github.com/nexoral/ReviewBuddy) | Tone: ${tone} | Language: ${language}*`;
+  const finalReply = `@${commentAuthor} ${replyText}${footer}`;
+  await postComment(GITHUB_REPOSITORY, prNumber, finalReply, GITHUB_TOKEN);
+  logSuccess("Replied to user comment.");
+
+  // If verdict changed and we have the recommendation comment, update it
+  if (verdictChanged && updatedVerdict && recommendationCommentId) {
+    logInfo(`Verdict changed to: ${updatedVerdict.status}. Updating recommendation comment...`);
+
+    const newStatus = updatedVerdict.status.toUpperCase().replace('_', ' ');
+    let newIcon = "✅";
+    if (newStatus === "REJECT") newIcon = "🚫";
+    else if (newStatus === "REQUEST CHANGES" || newStatus === "REQUEST_CHANGES") newIcon = "⚠️";
+
+    const newReasoning = Array.isArray(updatedVerdict.reasoning)
+      ? updatedVerdict.reasoning.map(r => `- ${r}`).join('\n')
+      : updatedVerdict.reasoning || "";
+
+    const commonMentions = `@${prAuthor}`;
+
+    let updatedRecComment = `<!-- Review Buddy Recommendation -->
+## ${newIcon} Review Buddy - Final Recommendation (Updated)
+> 👥 **Attention:** ${commonMentions}
+
+> **Note:** This verdict was updated after discussion in the PR comments.
+
+### Recommendation: **${newStatus}**
+
+${getToneMessage(newStatus, tone, language)}
+
+### Reasoning:
+${newReasoning}
+
+---
+
+### 📋 Review Checklist for Reviewers:
+- [ ] Code changes align with the PR description
+- [ ] No security vulnerabilities introduced
+- [ ] Performance considerations addressed
+- [ ] Code follows project conventions
+- [ ] Tests are adequate (if applicable)
+- [ ] Documentation updated (if needed)
+
+### 🎯 Next Steps:
+`;
+
+    if (newStatus === "APPROVE") {
+      if (tone === "roast" && language === "hinglish") updatedRecComment += "✅ **Agar tum satisfied ho, toh approve kar do aur merge kar do!**";
+      else if (tone === "funny") updatedRecComment += "✅ **If you're happy with it, smash that approve button! 👍**";
+      else updatedRecComment += "✅ **If all reviewers are satisfied, please approve and merge this PR.**";
+    } else if (newStatus === "REQUEST CHANGES") {
+      if (tone === "roast" && language === "hinglish") updatedRecComment += "⚠️ **Pehle suggestions address karo, phir approve karna.**";
+      else if (tone === "funny") updatedRecComment += "⚠️ **Fix the issues mentioned above, then we'll give this the thumbs up! 👍**";
+      else updatedRecComment += "⚠️ **Please address the suggestions above, then request re-review for approval.**";
+    } else {
+      if (tone === "roast" && language === "hinglish") updatedRecComment += "🚫 **Critical issues hai - is PR ko reject karo aur major fixes ke baad dobara submit karo.**";
+      else if (tone === "funny") updatedRecComment += "🚫 **This needs major work - please close this PR and submit a new one after fixes! 🔧**";
+      else updatedRecComment += "🚫 **This PR should be rejected. Please close and resubmit after addressing critical issues.**";
+    }
+
+    updatedRecComment += footer;
+    await updateComment(GITHUB_REPOSITORY, recommendationCommentId, updatedRecComment, GITHUB_TOKEN);
+    logSuccess("Recommendation comment updated with new verdict.");
+  } else if (verdictChanged && updatedVerdict && !recommendationCommentId) {
+    logWarning("Verdict changed but could not find the original recommendation comment to update.");
+  }
+}
+
+/**
+ * Returns a tone-appropriate opening message for a given verdict status.
+ */
+function getToneMessage(status, tone, language) {
+  if (status === "REJECT") {
+    if (tone === "roast" && language === "hinglish") return "**Arre bhai bhai bhai!** Ye PR toh reject karna padega!";
+    if (tone === "professional") return "This PR should be **REJECTED**.";
+    if (tone === "funny") return "🛑 **STOP RIGHT THERE!** This PR needs major work!";
+    return "This PR should be **REJECTED**.";
+  }
+  if (status === "REQUEST CHANGES") {
+    if (tone === "roast" && language === "hinglish") return "**Changes chahiye, bhai!** Abhi approve nahi kar sakte.";
+    if (tone === "professional") return "**REQUEST CHANGES** - This PR needs improvements before approval.";
+    if (tone === "funny") return "🔧 **Almost there, but not quite!** Time for some tweaks!";
+    return "**REQUEST CHANGES** - Improvements needed before approval.";
+  }
+  // APPROVE
+  if (tone === "roast" && language === "hinglish") return "**Shabash beta!** Ye PR approve karne layak hai.";
+  if (tone === "professional") return "**APPROVE** - This PR meets quality standards and is ready for merge.";
+  if (tone === "funny") return "🎉 **LGTM! (Looks Good To Merge!)** Ship it! 🚀";
+  return "**APPROVE** - This PR is ready for merge.";
 }
 
 async function main() {
