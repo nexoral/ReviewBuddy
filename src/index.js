@@ -6,9 +6,9 @@ const {
   logInfo, logSuccess, logWarning, logError, validateEnv,
   determineLabels, determineRecommendation
 } = require('./utils');
-const {
-  callGemini, constructPrompt, constructChatPrompt
-} = require('./gemini');
+const { getAdapter } = require('./adapters');
+const { constructReviewPromptText } = require('./prompts/reviewPrompt');
+const { constructChatPromptText } = require('./prompts/chatPrompt');
 const {
   fetchPRDetails, fetchPRDiff, postComment, updatePR, addLabels,
   fetchPRComments, updateComment
@@ -26,7 +26,44 @@ function getVersion() {
   return 'unknown';
 }
 
-async function handlePullRequest(env) {
+/**
+ * Resolves the correct API key based on the selected adapter.
+ */
+function resolveApiKey(adapterName, env) {
+  const name = (adapterName || 'gemini').toLowerCase();
+  if (name === 'openrouter') {
+    if (!env.OPENROUTER_API_KEY) {
+      logError("OPENROUTER_API_KEY is required when adapter is 'openrouter'.");
+      process.exit(1);
+    }
+    return env.OPENROUTER_API_KEY;
+  }
+  // Default: gemini
+  if (!env.GEMINI_API_KEY) {
+    logError("GEMINI_API_KEY is required when adapter is 'gemini'.");
+    process.exit(1);
+  }
+  return env.GEMINI_API_KEY;
+}
+
+/**
+ * Extracts clean JSON string from AI response text.
+ * Handles markdown code blocks and raw JSON.
+ */
+function extractJson(text) {
+  const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```\n([\s\S]*?)\n```/);
+  if (jsonMatch) return jsonMatch[1];
+
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1) {
+    return text.substring(firstBrace, lastBrace + 1);
+  }
+
+  return text;
+}
+
+async function handlePullRequest(env, adapter, apiKey, model) {
   logInfo("Starting Review Buddy (PR Mode)...");
 
   const appVersion = getVersion();
@@ -38,17 +75,15 @@ async function handlePullRequest(env) {
     GITHUB_REPOSITORY,
     PR_NUMBER,
     GITHUB_TOKEN,
-    GEMINI_API_KEY,
     TONE,
     LANGUAGE
   } = env;
 
-  // Use input PR number or fallback to event payload if needed (though action.yml passes it)
   const prNumber = PR_NUMBER;
   const tone = TONE || 'roast';
   const language = LANGUAGE || 'hinglish';
 
-  logInfo(`Configuration: Tone=${tone}, Language=${language}`);
+  logInfo(`Configuration: Tone=${tone}, Language=${language}, Adapter=${adapter.name}, Model=${model}`);
 
   // Fetch PR Data
   const prJson = await fetchPRDetails(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN);
@@ -84,35 +119,23 @@ async function handlePullRequest(env) {
   // Generate AI Content
   logInfo("Generating analysis...");
 
-  const promptPayload = constructPrompt(truncatedDiff, currentTitle, prAuthor, tone, language, String(needsDescUpdate));
-  const response = await callGemini(GEMINI_API_KEY, promptPayload);
+  const promptText = constructReviewPromptText(truncatedDiff, currentTitle, prAuthor, tone, language, String(needsDescUpdate));
+  const payload = adapter.buildPayload(promptText, model);
+  const response = await adapter.sendRequest(apiKey, payload, model);
 
   if (!response) {
-    logError("Failed to get response from Gemini.");
+    logError(`Failed to get response from ${adapter.name}.`);
+    process.exit(1);
+  }
+
+  const generatedText = adapter.extractText(response);
+  if (!generatedText) {
+    logError(`Empty response from ${adapter.name}.`);
     process.exit(1);
   }
 
   // Parse Response
-  // Gemini 2.0 structure: candidates[0].content.parts[0].text
-  const generatedText = response.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!generatedText) {
-    logError("Empty response from Gemini.");
-    process.exit(1);
-  }
-
-  let cleanJsonStr = generatedText;
-  // Attempt to extract JSON from markdown
-  const jsonMatch = generatedText.match(/```json\n([\s\S]*?)\n```/) || generatedText.match(/```\n([\s\S]*?)\n```/);
-  if (jsonMatch) {
-    cleanJsonStr = jsonMatch[1];
-  } else {
-    // Fallback: simple brace matching (naive)
-    const firstBrace = generatedText.indexOf('{');
-    const lastBrace = generatedText.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1) {
-      cleanJsonStr = generatedText.substring(firstBrace, lastBrace + 1);
-    }
-  }
+  const cleanJsonStr = extractJson(generatedText);
 
   let analysisResults;
   try {
@@ -120,7 +143,6 @@ async function handlePullRequest(env) {
   } catch (e) {
     logError(`Failed to parse JSON response: ${e.message}`);
     logInfo(`Raw text: ${generatedText}`);
-    // Last ditch effort: try to see if it's just raw text? No, failing hard is safer than bad parsing.
     process.exit(1);
   }
 
@@ -283,14 +305,8 @@ ${recData.reasoning}
   logSuccess("All tasks finished successfully!");
 }
 
-async function handleIssueComment(env) {
+async function handleIssueComment(env, adapter, apiKey, model) {
   logInfo("Starting Review Buddy (Comment Reply Mode)...");
-
-  // Validate keys specifically for this flow
-  if (!env.GEMINI_API_KEY || !env.GITHUB_TOKEN) {
-    logError("GEMINI_API_KEY or GITHUB_TOKEN is missing.");
-    process.exit(1);
-  }
 
   const eventPath = process.env.GITHUB_EVENT_PATH;
   if (!fs.existsSync(eventPath)) {
@@ -327,7 +343,6 @@ async function handleIssueComment(env) {
   const {
     GITHUB_REPOSITORY,
     GITHUB_TOKEN,
-    GEMINI_API_KEY,
     TONE,
     LANGUAGE
   } = env;
@@ -355,7 +370,6 @@ async function handleIssueComment(env) {
   // Build conversation history string and find the recommendation comment
   let conversationHistory = "";
   let recommendationCommentId = null;
-  let recommendationCommentBody = null;
   let currentVerdict = null;
 
   for (const c of allComments) {
@@ -365,7 +379,6 @@ async function handleIssueComment(env) {
     // Track the recommendation comment for potential update
     if (body.includes("<!-- Review Buddy Recommendation -->")) {
       recommendationCommentId = c.id;
-      recommendationCommentBody = body;
 
       // Extract current verdict status from the comment
       const statusMatch = body.match(/### Recommendation: \*\*(.+?)\*\*/);
@@ -395,37 +408,28 @@ async function handleIssueComment(env) {
 
   // Generate Reply with full context
   logInfo("Generating context-aware reply...");
-  const promptPayload = constructChatPrompt(
+  const promptText = constructChatPromptText(
     truncatedDiff, currentTitle, prAuthor, commentBody, commentAuthor,
     tone, language, conversationHistory, currentVerdict
   );
-  const response = await callGemini(GEMINI_API_KEY, promptPayload);
+  const payload = adapter.buildPayload(promptText, model);
+  const response = await adapter.sendRequest(apiKey, payload, model);
 
   if (!response) {
-    logError("Failed to get response from Gemini.");
+    logError(`Failed to get response from ${adapter.name}.`);
     process.exit(1);
   }
 
-  const generatedText = response.candidates?.[0]?.content?.parts?.[0]?.text;
+  const generatedText = adapter.extractText(response);
   if (!generatedText) {
-    logError("Empty response from Gemini.");
+    logError(`Empty response from ${adapter.name}.`);
     process.exit(1);
   }
 
   // Parse the JSON response
   let parsedResponse;
   try {
-    let cleanJson = generatedText;
-    const jsonMatch = generatedText.match(/```json\n([\s\S]*?)\n```/) || generatedText.match(/```\n([\s\S]*?)\n```/);
-    if (jsonMatch) {
-      cleanJson = jsonMatch[1];
-    } else {
-      const firstBrace = generatedText.indexOf('{');
-      const lastBrace = generatedText.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1) {
-        cleanJson = generatedText.substring(firstBrace, lastBrace + 1);
-      }
-    }
+    const cleanJson = extractJson(generatedText);
     parsedResponse = JSON.parse(cleanJson);
   } catch (e) {
     // Fallback: treat the entire response as plain text reply (backwards compatible)
@@ -530,14 +534,14 @@ function getToneMessage(status, tone, language) {
 }
 
 async function main() {
-  // Map inputs from environment variables (standard GitHub Actions pattern: INPUT_NAME)
-  // We already passed them in handlePullRequest from process.env, but let's formalize.
-
   const env = {
     GITHUB_REPOSITORY: process.env.GITHUB_REPOSITORY,
     GITHUB_EVENT_NAME: process.env.GITHUB_EVENT_NAME,
     GITHUB_TOKEN: process.env.GITHUB_TOKEN,
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+    ADAPTER: process.env.ADAPTER,
+    MODEL: process.env.MODEL,
     PR_NUMBER: process.env.PR_NUMBER,
     TONE: process.env.TONE,
     LANGUAGE: process.env.LANGUAGE
@@ -545,18 +549,32 @@ async function main() {
 
   logInfo(`GitHub Event Name: ${env.GITHUB_EVENT_NAME}`);
 
-  // Meaningful Logs
   const actionVersion = getVersion();
   logInfo(`ReviewBuddy Version: ${actionVersion}`);
   logInfo(`Node.js Version: ${process.version}`);
   logInfo(`Platform: ${process.platform} (${process.arch})`);
 
+  // Resolve adapter, API key, and model
+  const adapterName = env.ADAPTER || 'gemini';
+  const adapter = getAdapter(adapterName);
+  const model = env.MODEL || adapter.defaultModel;
+
+  logInfo(`AI Provider: ${adapter.name} | Model: ${model}`);
+
+  // Validate model is set (OpenRouter requires explicit model)
+  if (!model) {
+    logError(`Model is required for the '${adapterName}' adapter. Please set the 'model' input.`);
+    process.exit(1);
+  }
+
   if (env.GITHUB_EVENT_NAME === 'pull_request' || env.GITHUB_EVENT_NAME === 'pull_request_target') {
-    validateEnv(); // Checks KEYS
-    await handlePullRequest(env);
+    validateEnv(adapterName);
+    const apiKey = resolveApiKey(adapterName, env);
+    await handlePullRequest(env, adapter, apiKey, model);
   } else if (env.GITHUB_EVENT_NAME === 'issue_comment') {
-    // Validation happens inside to allow skipping non-PR comments without hard fail on keys if logic dictates
-    await handleIssueComment(env);
+    // Resolve API key here; if missing, exit early with clear error
+    const apiKey = resolveApiKey(adapterName, env);
+    await handleIssueComment(env, adapter, apiKey, model);
   } else {
     logWarning(`Unsupported event: ${env.GITHUB_EVENT_NAME}`);
     process.exit(0);

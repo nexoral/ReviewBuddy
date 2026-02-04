@@ -1,5 +1,5 @@
 name: "Review Buddy AI"
-description: "AI-powered PR assistant that reviews code, updates descriptions, and suggests titles using Gemini."
+description: "AI-powered PR assistant that reviews code, updates descriptions, and suggests titles. Supports Gemini and OpenRouter."
 author: "AnkanSaha"
 branding:
   icon: "edit"
@@ -11,8 +11,18 @@ inputs:
     required: false
     default: "${{ github.token }}"
   gemini_api_key:
-    description: "Google Gemini API Key"
-    required: true
+    description: "Google Gemini API Key (required when adapter is 'gemini')"
+    required: false
+  openrouter_api_key:
+    description: "OpenRouter API Key (required when adapter is 'openrouter')"
+    required: false
+  adapter:
+    description: "AI provider adapter to use ('gemini' or 'openrouter')"
+    required: false
+    default: "gemini"
+  model:
+    description: "Model name to use (defaults to adapter's default model)"
+    required: false
   pr_number:
     description: "Pull Request Number"
     required: true
@@ -38,6 +48,9 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
         GEMINI_API_KEY: ${{ inputs.gemini_api_key }}
+        OPENROUTER_API_KEY: ${{ inputs.openrouter_api_key }}
+        ADAPTER: ${{ inputs.adapter }}
+        MODEL: ${{ inputs.model }}
         PR_NUMBER: ${{ inputs.pr_number }}
         GITHUB_REPOSITORY: ${{ inputs.repository }}
         TONE: ${{ inputs.tone }}
