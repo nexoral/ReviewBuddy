@@ -1,11 +1,14 @@
 // src/adapters/index.js
 const geminiAdapter = require('./geminiAdapter');
 const openrouterAdapter = require('./openrouterAdapter');
+const githubModelsAdapter = require('./githubModelsAdapter');
 const { logError } = require('../utils');
 
 const adapters = {
   gemini: geminiAdapter,
-  openrouter: openrouterAdapter
+  openrouter: openrouterAdapter,
+  'github-models': githubModelsAdapter,
+  'github_models': githubModelsAdapter // Alias for convenience
 };
 
 /**

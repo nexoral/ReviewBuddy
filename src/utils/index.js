@@ -17,7 +17,7 @@ const logError = (msg) => console.error(`${COLORS.RED}[ERROR]${COLORS.RESET} ${m
 
 /**
  * Validates required environment variables based on the selected adapter.
- * @param {string} [adapterName] - The adapter name ("gemini" or "openrouter")
+ * @param {string} [adapterName] - The adapter name ("gemini", "openrouter", "github-models")
  * @returns {object} The validated environment variables.
  */
 function validateEnv(adapterName) {
@@ -26,11 +26,18 @@ function validateEnv(adapterName) {
 
   // API key validation is adapter-specific
   if (name === 'openrouter') {
-    if (!process.env.OPENROUTER_API_KEY) missing.push('OPENROUTER_API_KEY');
+    if (!process.env.ADAPTIVE_API_TOKEN) {
+      missing.push('ADAPTIVE_API_TOKEN');
+    }
+  } else if (name === 'github-models' || name === 'github_models') {
+    if (!process.env.ADAPTIVE_API_TOKEN && !process.env.GITHUB_TOKEN) {
+      missing.push('ADAPTIVE_API_TOKEN (or GITHUB_TOKEN)');
+    }
   } else {
     if (!process.env.GEMINI_API_KEY && !process.env.INPUT_GEMINI_API_KEY) missing.push('GEMINI_API_KEY');
   }
 
+  // GITHUB_TOKEN is always needed for PR operations
   if (!process.env.GITHUB_TOKEN && !process.env.INPUT_GITHUB_TOKEN) missing.push('GITHUB_TOKEN');
 
   if (missing.length > 0) {

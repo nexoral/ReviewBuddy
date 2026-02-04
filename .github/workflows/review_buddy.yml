@@ -16,4 +16,4 @@ jobs:
         with:
           adapter: ${{ secrets.ADAPTER }}
           model: ${{ secrets.MODEL }}
-          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+          adaptive_api_token: ${{ secrets.ADAPTIVE_API_KEY }}
