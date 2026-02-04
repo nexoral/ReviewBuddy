@@ -74,82 +74,85 @@ function determineLabels(title, maintainabilityScore, securityAnalysis, performa
 
 /**
  * Determines the final recommendation status and message.
+ * Uses Gemini's structured verdict when available, falls back to heuristics.
  */
-function determineRecommendation(maintainabilityScore, qualityScore, securityAnalysis, performanceAnalysis, tone, language) {
+function determineRecommendation(maintainabilityScore, qualityScore, securityAnalysis, performanceAnalysis, tone, language, verdict) {
   const score = parseInt(maintainabilityScore, 10) || 0;
-  const hasCriticalSecurity = securityAnalysis && securityAnalysis.includes("Critical");
-  const hasHighSecurity = securityAnalysis && securityAnalysis.includes("High");
 
-  let status = "APPROVE";
+  // Use Gemini's structured verdict if available
+  let status;
+  let aiReasoning;
+  if (verdict && verdict.status) {
+    // Normalize Gemini's status to our display format
+    const verdictStatus = verdict.status.toUpperCase().replace('_', ' ');
+    if (verdictStatus === "REJECT") status = "REJECT";
+    else if (verdictStatus === "REQUEST CHANGES" || verdictStatus === "REQUEST_CHANGES") status = "REQUEST CHANGES";
+    else status = "APPROVE";
+
+    aiReasoning = Array.isArray(verdict.reasoning)
+      ? verdict.reasoning.map(r => `- ${r}`).join('\n')
+      : null;
+  } else {
+    // Fallback: heuristic-based (legacy behavior, improved)
+    // Only flag critical/high if they appear as actual severity labels in structured context
+    const hasCriticalSecurity = securityAnalysis &&
+      /\*\*?Severity\*?\*?:\s*Critical/i.test(securityAnalysis);
+    const hasHighSecurity = securityAnalysis &&
+      /\*\*?Severity\*?\*?:\s*High/i.test(securityAnalysis);
+
+    if (hasCriticalSecurity || score < 40) {
+      status = "REJECT";
+    } else if (hasHighSecurity || score < 60) {
+      status = "REQUEST CHANGES";
+    } else {
+      status = "APPROVE";
+    }
+  }
+
   let icon = "✅";
   let message = "";
   let reasoning = "";
 
-  if (hasCriticalSecurity) {
-    status = "REJECT";
+  if (status === "REJECT") {
     icon = "🚫";
     if (tone === "roast" && language === "hinglish") {
-      message = "**Arre bhai bhai bhai!** Ye PR toh reject karna padega. Critical security issues hai!";
-      reasoning = "- **Critical Security Issues** detected kiye gaye hain jo production mein bahut dangerous ho sakte hain.\n- Pehle in security vulnerabilities ko fix karo, phir hi merge karna.";
+      message = "**Arre bhai bhai bhai!** Ye PR toh reject karna padega!";
     } else if (tone === "professional") {
-      message = "This PR should be **REJECTED** due to critical security vulnerabilities.";
-      reasoning = "- **Critical security issues** have been identified that could pose serious risks in production.\n- These must be addressed before this PR can be merged.";
+      message = "This PR should be **REJECTED**.";
     } else if (tone === "funny") {
-      message = "🛑 **STOP RIGHT THERE!** This PR has critical security holes big enough to drive a truck through! 🚛";
-      reasoning = "- Critical security issues found - we don't want hackers having a field day! 🏴‍☠️\n- Fix these vulnerabilities first, then we'll talk merge! 🔒";
+      message = "🛑 **STOP RIGHT THERE!** This PR needs major work!";
     } else {
-      message = "This PR should be **REJECTED** due to critical security issues.";
-      reasoning = "- Critical security vulnerabilities detected.\n- Please address these issues before proceeding.";
+      message = "This PR should be **REJECTED**.";
     }
-  } else if (score < 40) {
-    status = "REJECT";
-    icon = "🚫";
-    if (tone === "roast" && language === "hinglish") {
-      message = "**Bhai, yaar!** Is code ki quality bahut kharab hai. Reject kar do!";
-      reasoning = `- Overall Benchmark Score bahut low hai: **${score}/100**\n- Code quality, maintainability, aur best practices mein bahut improvement chahiye.\n- Isko refactor karke dobara submit karo.`;
-    } else if (tone === "professional") {
-      message = "This PR should be **REJECTED** due to poor code quality.";
-      reasoning = `- Overall Benchmark Score is critically low: **${score}/100**\n- Significant improvements needed in code quality and maintainability.\n- Please refactor and resubmit.`;
-    } else if (tone === "funny") {
-      message = "😬 **Ouch!** This code needs some serious TLC (Tender Loving Code)!";
-      reasoning = `- Quality score is in the danger zone: **${score}/100** 📉\n- Time for a major makeover before this can see the light of production! 💅\n- Refactor and come back stronger! 💪`;
-    } else {
-      message = "This PR should be **REJECTED** due to low quality score.";
-      reasoning = `- Overall quality score: **${score}/100**\n- Significant refactoring required.`;
-    }
-  } else if (hasHighSecurity || score < 60) {
-    status = "REQUEST CHANGES";
+
+    reasoning = aiReasoning || `- Overall Benchmark Score: **${score}/100**\n- Significant issues need to be resolved before this can be merged.`;
+  } else if (status === "REQUEST CHANGES") {
     icon = "⚠️";
     if (tone === "roast" && language === "hinglish") {
       message = "**Changes chahiye, bhai!** Abhi approve nahi kar sakte.";
-      reasoning = "- Kuch security concerns ya quality issues hain jo fix karne padenge.\n- Suggestions ko address karo, improvements karo.\n- Sab fix hone ke baad hi approve hoga.";
     } else if (tone === "professional") {
       message = "**REQUEST CHANGES** - This PR needs improvements before approval.";
-      reasoning = "- Some security concerns or quality issues need to be addressed.\n- Please review the feedback and make necessary improvements.\n- Once changes are made, this can be approved.";
     } else if (tone === "funny") {
       message = "🔧 **Almost there, but not quite!** Time for some tweaks!";
-      reasoning = "- Found some issues that need fixing before we can give this the green light! 🚦\n- Check out the suggestions and polish this gem! 💎\n- You're on the right track, just needs a bit more love! ❤️";
     } else {
       message = "**REQUEST CHANGES** - Improvements needed before approval.";
-      reasoning = "- Some issues need to be addressed.\n- Please review feedback and make improvements.";
     }
+
+    reasoning = aiReasoning || `- Some issues need to be addressed.\n- Please review feedback and make improvements.`;
   } else {
-    // Approve
-    status = "APPROVE";
+    // APPROVE
     icon = "✅";
     if (tone === "roast" && language === "hinglish") {
       message = "**Shabash beta!** Ye PR approve karne layak hai.";
-      reasoning = `- Code quality achhi hai: **${score}/100**\n- Koi critical issues nahi hain.\n- Agar sab reviewers satisfied hain, toh approve kar do aur merge karo!`;
     } else if (tone === "professional") {
       message = "**APPROVE** - This PR meets quality standards and is ready for merge.";
-      reasoning = `- Code quality is good: **${score}/100**\n- No critical issues found.\n- If all reviewers are satisfied, this can be approved and merged.`;
     } else if (tone === "funny") {
       message = "🎉 **LGTM! (Looks Good To Merge!)** Ship it! 🚀";
-      reasoning = `- Quality score looking fresh: **${score}/100** 🌟\n- No deal-breakers found! 👍\n- Give it the green stamp of approval and let's get this to prod! 🎊`;
     } else {
       message = "**APPROVE** - This PR is ready for merge.";
-      reasoning = `- Quality score: **${score}/100**\n- No critical issues found.\n- Ready for approval.`;
     }
+
+    reasoning = aiReasoning || `- Quality score: **${score}/100**\n- No critical issues found.\n- Ready for approval.`;
   }
 
   return { status, icon, message, reasoning };

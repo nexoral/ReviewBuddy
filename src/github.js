@@ -108,6 +108,58 @@ async function updatePR(repo, prNum, payload, token) {
   }
 }
 
+async function fetchPRComments(repo, prNum, token) {
+  const url = `https://api.github.com/repos/${repo}/issues/${prNum}/comments?per_page=100`;
+  logInfo(`Fetching PR comments for #${prNum}...`);
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'ReviewBuddy-Action'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    logWarning(`Failed to fetch PR comments: ${error.message}`);
+    return [];
+  }
+}
+
+async function updateComment(repo, commentId, body, token) {
+  if (!body || !commentId) return;
+
+  logInfo(`Updating comment ${commentId}...`);
+  const url = `https://api.github.com/repos/${repo}/issues/comments/${commentId}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'ReviewBuddy-Action'
+      },
+      body: JSON.stringify({ body })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    logSuccess("Comment updated successfully");
+  } catch (error) {
+    logError(`Failed to update comment: ${error.message}`);
+  }
+}
+
 async function addLabels(repo, prNum, labels, token) {
   if (!labels || labels.length === 0) return;
 
@@ -142,5 +194,7 @@ module.exports = {
   fetchPRDiff,
   postComment,
   updatePR,
-  addLabels
+  addLabels,
+  fetchPRComments,
+  updateComment
 };
