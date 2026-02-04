@@ -41,9 +41,11 @@ jobs:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
 ```
 
-> **💰 Cost-Efficient**: Review Buddy makes only **ONE** Gemini API call per PR (using `gemini-2.0-flash-exp`) to generate the complete review report (code analysis, suggestions, description, labels, and recommendation). No expensive multi-call workflows—just fast, affordable AI reviews!
+> **💰 Cost-Efficient**: Review Buddy makes only **ONE** AI API call per PR to generate the complete review report (code analysis, suggestions, description, labels, and recommendation). No expensive multi-call workflows—just fast, affordable AI reviews!
 >
-> **🚀 Simple & Smart**: Just add one Gemini API key with a small config file, and your Repo PR becomes smarter!
+> **🔌 Multi-Provider**: Supports **Gemini** (default) and **OpenRouter** (access 100+ models). Bring your own API key and model!
+>
+> **🚀 Simple & Smart**: Just add one API key with a small config file, and your Repo PR becomes smarter!
 
 ## 💡 Why I Built This
 
@@ -79,7 +81,10 @@ I built **Review Buddy** to solve this:
 -   **🌐 Multi-Language Support**:
     -   `hinglish` (Default): A mix of Hindi and English (Perfect for Indian dev teams!).
     -   `english`: Standard Professional English.
-    -   *Any other language supported by Gemini.*
+    -   *Any other language supported by the AI model.*
+-   **🔌 Multi-Provider Support**:
+    -   `gemini` (Default): Google Gemini API (`gemini-3-flash-preview` by default).
+    -   `openrouter`: Access 100+ models via OpenRouter (Claude, GPT, Llama, Mistral, etc.).
 
 ---
 
@@ -88,7 +93,10 @@ I built **Review Buddy** to solve this:
 | Input | Description | Required | Default |
 | :--- | :--- | :--- | :--- |
 | `github_token` | GitHub Token (use `secrets.GITHUB_TOKEN`) | No | `${{ github.token }}` |
-| `gemini_api_key` | Your Google Gemini API Key | **Yes** | N/A |
+| `gemini_api_key` | Google Gemini API Key (required for `gemini` adapter) | Conditional | N/A |
+| `openrouter_api_key` | OpenRouter API Key (required for `openrouter` adapter) | Conditional | N/A |
+| `adapter` | AI provider (`gemini` or `openrouter`) | No | `gemini` |
+| `model` | Model name override (e.g., `gemini-2.5-pro`, `anthropic/claude-sonnet-4`) | No | Adapter default |
 | `tone` | The personality (`professional`, `funny`, `roast`, `friendly`) | No | `roast` |
 | `language` | Language of the review (e.g., `english`, `hinglish`) | No | `hinglish` |
 | `pr_number` | The PR number to process | No | Auto-detected |
@@ -173,7 +181,32 @@ jobs:
           language: 'english'
 ```
 
-### 3. Handling Forked PRs (Open Source)
+### 3. Custom Gemini Model
+*Use a specific Gemini model.*
+
+```yaml
+      - name: Run Review Buddy
+        uses: nexoral/ReviewBuddy@main
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          model: 'gemini-2.5-pro'
+```
+
+### 4. OpenRouter Configuration
+*Use any model via OpenRouter (Claude, GPT, Llama, Mistral, etc.).*
+
+```yaml
+      - name: Run Review Buddy
+        uses: nexoral/ReviewBuddy@main
+        with:
+          adapter: 'openrouter'
+          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+          model: 'anthropic/claude-sonnet-4'
+          tone: 'professional'
+          language: 'english'
+```
+
+### 5. Handling Forked PRs (Open Source)
 **Important**: PRs from forks have read-only permissions by default. To allow Review Buddy to comment and update descriptions on forked PRs, use `pull_request_target`.
 
 ```yaml
@@ -239,9 +272,15 @@ A: It tells GitHub Actions to use the latest version of the code from the `main`
 
 ## ⚙️ Setup
 
+**For Gemini (Default):**
 1.  **Get a Gemini API Key**: Visit [Google AI Studio](https://makersuite.google.com/) to create a free API key.
 2.  **Add Secrets**: Go to your repository **Settings > Secrets and variables > Actions** and add `GEMINI_API_KEY`.
 3.  **Add Workflow**: Copy one of the usage examples above into a new yaml file in `.github/workflows/`.
+
+**For OpenRouter:**
+1.  **Get an OpenRouter API Key**: Visit [OpenRouter](https://openrouter.ai/) and create an API key.
+2.  **Add Secrets**: Add `OPENROUTER_API_KEY` to your repository secrets.
+3.  **Add Workflow**: Use the OpenRouter configuration example above, setting `adapter: 'openrouter'` and your preferred `model`.
 
 ---
 
@@ -251,28 +290,36 @@ Verified Source Code structure for contributors:
 
 ```
 ReviewBuddy/
-├── action.yml                  # GitHub Action definition & metadata
-├── VERSION                     # Current version tracker
-├── LICENSE                     # MIT License
-├── README.md                   # Documentation
-├── CODE_OF_CONDUCT.md          # Community guidelines
-├── CONTRIBUTING.md              # Contribution guidelines
-├── SECURITY.md                 # Security policy
-├── SUPPORT.md                  # Support documentation
+├── action.yml                      # GitHub Action definition & metadata
+├── VERSION                         # Current version tracker
+├── LICENSE                         # MIT License
+├── README.md                       # Documentation
+├── CODE_OF_CONDUCT.md              # Community guidelines
+├── CONTRIBUTING.md                 # Contribution guidelines
+├── SECURITY.md                     # Security policy
+├── SUPPORT.md                      # Support documentation
 ├── src/
-│   ├── index.js                # Entry point & orchestration logic
-│   ├── github.js               # GitHub API interactions (PR, comments, labels)
-│   ├── gemini.js               # Gemini AI API client & prompt construction
-│   └── utils.js                # Utilities (logging, scoring, recommendations)
+│   ├── index.js                    # Entry point & orchestration logic
+│   ├── github/
+│   │   └── index.js                # GitHub API interactions (PR, comments, labels)
+│   ├── utils/
+│   │   └── index.js                # Utilities (logging, scoring, recommendations)
+│   ├── prompts/
+│   │   ├── reviewPrompt.js         # PR review prompt text (provider-agnostic)
+│   │   └── chatPrompt.js           # Chat reply prompt text (provider-agnostic)
+│   └── adapters/
+│       ├── index.js                # Adapter registry & factory
+│       ├── geminiAdapter.js        # Google Gemini API adapter
+│       └── openrouterAdapter.js    # OpenRouter API adapter
 └── .github/
-    ├── FUNDING.yml             # GitHub Sponsors configuration
-    ├── pull_request_template.md # PR template
+    ├── FUNDING.yml                 # GitHub Sponsors configuration
+    ├── pull_request_template.md    # PR template
     ├── ISSUE_TEMPLATE/
-    │   ├── bug_report.md       # Bug report template
-    │   └── feature_request.md  # Feature request template
+    │   ├── bug_report.md           # Bug report template
+    │   └── feature_request.md      # Feature request template
     └── workflows/
-        ├── review_buddy.yml    # ReviewBuddy CI workflow
-        └── auto-release.yml    # Automated release on version bump
+        ├── review_buddy.yml        # ReviewBuddy CI workflow
+        └── auto-release.yml        # Automated release on version bump
 ```
 
 ## 🤝 Contributing

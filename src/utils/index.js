@@ -1,5 +1,5 @@
 
-// src/utils.js
+// src/utils/index.js
 
 // ANSI Colors for logging
 const COLORS = {
@@ -16,21 +16,27 @@ const logWarning = (msg) => console.warn(`${COLORS.YELLOW}[WARN]${COLORS.RESET} 
 const logError = (msg) => console.error(`${COLORS.RED}[ERROR]${COLORS.RESET} ${msg}`);
 
 /**
- * Validates required environment variables.
+ * Validates required environment variables based on the selected adapter.
+ * @param {string} [adapterName] - The adapter name ("gemini" or "openrouter")
  * @returns {object} The validated environment variables.
  */
-function validateEnv() {
+function validateEnv(adapterName) {
   const missing = [];
-  if (!process.env.GEMINI_API_KEY && !process.env.INPUT_GEMINI_API_KEY) missing.push('GEMINI_API_KEY');
+  const name = (adapterName || 'gemini').toLowerCase();
+
+  // API key validation is adapter-specific
+  if (name === 'openrouter') {
+    if (!process.env.OPENROUTER_API_KEY) missing.push('OPENROUTER_API_KEY');
+  } else {
+    if (!process.env.GEMINI_API_KEY && !process.env.INPUT_GEMINI_API_KEY) missing.push('GEMINI_API_KEY');
+  }
+
   if (!process.env.GITHUB_TOKEN && !process.env.INPUT_GITHUB_TOKEN) missing.push('GITHUB_TOKEN');
 
   if (missing.length > 0) {
     logError(`Missing required environment variables: ${missing.join(', ')}`);
     process.exit(1);
   }
-
-  // PR_NUMBER might be missing if it's not a PR event (handled in main logic usually, but good to check if needed)
-  // We will validate PR_NUMBER specifically where it is needed.
 
   return process.env;
 }

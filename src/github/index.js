@@ -1,6 +1,6 @@
 
-// src/github.js
-const { logInfo, logError, logSuccess, logWarning } = require('./utils');
+// src/github/index.js
+const { logInfo, logError, logSuccess, logWarning } = require('../utils');
 
 async function fetchPRDetails(repo, prNum, token) {
   const url = `https://api.github.com/repos/${repo}/pulls/${prNum}`;
