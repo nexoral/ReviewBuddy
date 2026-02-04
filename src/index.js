@@ -142,9 +142,12 @@ async function handlePullRequest(env, adapter, apiKey, model) {
     analysisResults = JSON.parse(cleanJsonStr);
   } catch (e) {
     logError(`Failed to parse JSON response: ${e.message}`);
-    logInfo(`Raw text: ${generatedText}`);
+    logInfo(`Raw text (first 500 chars): ${generatedText.substring(0, 500)}`);
     process.exit(1);
   }
+
+  // Debug: Log the parsed structure
+  logInfo(`Parsed response keys: ${Object.keys(analysisResults).join(', ')}`);
 
   const {
     review_comment,
@@ -158,8 +161,37 @@ async function handlePullRequest(env, adapter, apiKey, model) {
     verdict
   } = analysisResults;
 
+  // Validate and clean array-to-string issues (for broken models)
+  const cleanField = (field, fieldName) => {
+    if (!field) return field;
+    if (typeof field === 'string') return field;
+    if (Array.isArray(field)) {
+      logWarning(`${fieldName} is an array (broken model output), converting to string`);
+      return field.map(item => {
+        if (typeof item === 'object') {
+          return JSON.stringify(item, null, 2);
+        }
+        return String(item);
+      }).join('\n\n');
+    }
+    if (typeof field === 'object') {
+      logWarning(`${fieldName} is an object (broken model output), converting to JSON string`);
+      return JSON.stringify(field, null, 2);
+    }
+    return String(field);
+  };
+
+  const cleanedReview = cleanField(review_comment, 'review_comment');
+  const cleanedPerformance = cleanField(performance_analysis, 'performance_analysis');
+  const cleanedSecurity = cleanField(security_analysis, 'security_analysis');
+  const cleanedQuality = cleanField(quality_analysis, 'quality_analysis');
+
   const score = quality_score || 0;
   const mScore = maintainability_score || 0;
+
+  // Debug: Log title/description status
+  logInfo(`Title update: ${new_title ? `"${new_title}"` : 'null'}`);
+  logInfo(`Description update: ${new_description ? `${new_description.length} chars` : 'null'}`);
 
   logSuccess(`Analysis Complete. Quality Score: ${score}/10 | Overall Benchmark: ${mScore}/100`);
 
@@ -169,14 +201,22 @@ async function handlePullRequest(env, adapter, apiKey, model) {
   logInfo("Step 1: Updating PR title and description...");
   let updatePayload = {};
 
-  if (new_title && new_title !== "null" && new_title !== currentTitle) {
+  if (new_title && new_title !== "null" && new_title.toLowerCase() !== "null" && new_title !== currentTitle) {
     logInfo(`Suggesting new title: ${new_title}`);
     updatePayload.title = new_title;
+  } else {
+    if (!new_title || new_title === "null" || new_title.toLowerCase() === "null") {
+      logInfo("No title update needed (AI returned null)");
+    } else if (new_title === currentTitle) {
+      logInfo("Title already matches suggestion, skipping update");
+    }
   }
 
-  if (new_description && new_description !== "null") {
+  if (new_description && new_description !== "null" && new_description.toLowerCase() !== "null") {
     logInfo("Updating description...");
     updatePayload.body = new_description;
+  } else {
+    logInfo("No description update needed (AI returned null or empty)");
   }
 
   await updatePR(GITHUB_REPOSITORY, prNumber, updatePayload, GITHUB_TOKEN);
@@ -192,43 +232,43 @@ async function handlePullRequest(env, adapter, apiKey, model) {
 
   // Step 2: General Review
   logInfo("Step 2: Posting general changes review...");
-  if (review_comment) {
+  if (cleanedReview) {
     const comment = `<!-- Review Buddy Start -->
 ## 🤖 Review Buddy - General Code Review
 > 👥 **Attention:** ${commonMentions}
 
-${review_comment}
+${cleanedReview}
 ${footer}`;
     await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
   }
 
   // Step 3: Performance
   logInfo("Step 3: Posting performance analysis...");
-  if (performance_analysis) {
+  if (cleanedPerformance) {
     const comment = `<!-- Review Buddy Performance -->
 ## ⚡ Review Buddy - Performance Analysis
 > 👥 **Attention:** ${commonMentions}
 
-${performance_analysis}
+${cleanedPerformance}
 ${footer}`;
     await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
   }
 
   // Step 4: Security
   logInfo("Step 4: Posting security audit...");
-  if (security_analysis) {
+  if (cleanedSecurity) {
     const comment = `<!-- Review Buddy Security -->
 ## 🔐 Review Buddy - Security Audit
 > 👥 **Attention:** ${commonMentions}
 
-${security_analysis}
+${cleanedSecurity}
 ${footer}`;
     await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
   }
 
   // Step 5: Quality
   logInfo("Step 5: Posting code quality analysis...");
-  if (quality_analysis) {
+  if (cleanedQuality) {
     let scoreLabel = "Poor";
     if (mScore >= 90) scoreLabel = "Excellent";
     else if (mScore >= 70) scoreLabel = "Good";
@@ -240,7 +280,7 @@ ${footer}`;
 
 ### 🎯 Overall Benchmark: **${mScore}/100** (${scoreLabel})
 
-${quality_analysis}
+${cleanedQuality}
 ${footer}`;
     await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
   }
@@ -258,7 +298,7 @@ ${footer}`;
 
   // Step 7: Final Recommendation
   logInfo("Step 7: Posting final recommendation...");
-  const recData = determineRecommendation(mScore, score, security_analysis, performance_analysis, tone, language, verdict);
+  const recData = determineRecommendation(mScore, score, cleanedSecurity, cleanedPerformance, tone, language, verdict);
 
   let recComment = `<!-- Review Buddy Recommendation -->
 ## ${recData.icon} Review Buddy - Final Recommendation
