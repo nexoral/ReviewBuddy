@@ -5,7 +5,7 @@ const { logInfo, logError } = require('./utils');
 async function callGemini(apiKey, payload) {
   const apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
   logInfo("Sending request to Gemini AI...");
-gemini-2.5-pro
+
   try {
     const response = await fetch(apiUrl, {
       method: 'POST',
