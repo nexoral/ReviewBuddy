@@ -222,12 +222,15 @@ A: Review Buddy will gracefully skip labels that don't exist. To use this featur
 - `security`, `performance`
 
 **Q: How does Review Buddy decide whether to recommend Approve, Request Changes, or Reject?**
-A: Review Buddy uses an intelligent decision algorithm based on multiple factors:
-- **REJECT**: If critical security issues are detected OR quality score is below 40/100
-- **REQUEST CHANGES**: If high-severity security issues exist OR quality score is 40-59/100
-- **APPROVE**: If quality score is 60+/100 and no critical/high security issues
+A: Review Buddy uses AI-driven verdict determination. Gemini analyzes the code and returns a structured verdict that considers:
+- The **perspective and purpose** of the changes (e.g., config/docs changes are judged leniently, auth/security PRs are judged strictly)
+- Whether security issues are **real and exploitable**, not just theoretical
+- The overall code quality, maintainability, and risk
 
 The recommendation is posted as a final comment with detailed reasoning and next steps.
+
+**Q: Can I dispute Review Buddy's verdict?**
+A: Yes! Reply with `/buddy` and explain your reasoning (e.g., "/buddy this is a config-only change, the security concerns don't apply here"). Review Buddy will re-evaluate the verdict based on your explanation and the full conversation context, and **update the original recommendation comment** if warranted.
 
 **Q: What does `@main` mean in `uses: ...@main`?**
 A: It tells GitHub Actions to use the latest version of the code from the `main` branch. For production stability, you may want to use a specific tag (e.g., `@v1.0.0`) once released.
@@ -248,13 +251,28 @@ Verified Source Code structure for contributors:
 
 ```
 ReviewBuddy/
-├── action.yml          # Action definition & metadata
-├── entrypoint.sh       # Bootstrapper script
-└── src/
-    ├── main.sh         # Core logic orchestration
-    ├── github.sh       # GitHub API interaction module
-    ├── gemini.sh       # Gemini API interaction module
-    └── utils.sh        # Shared utilities (logging, etc.)
+├── action.yml                  # GitHub Action definition & metadata
+├── VERSION                     # Current version tracker
+├── LICENSE                     # MIT License
+├── README.md                   # Documentation
+├── CODE_OF_CONDUCT.md          # Community guidelines
+├── CONTRIBUTING.md              # Contribution guidelines
+├── SECURITY.md                 # Security policy
+├── SUPPORT.md                  # Support documentation
+├── src/
+│   ├── index.js                # Entry point & orchestration logic
+│   ├── github.js               # GitHub API interactions (PR, comments, labels)
+│   ├── gemini.js               # Gemini AI API client & prompt construction
+│   └── utils.js                # Utilities (logging, scoring, recommendations)
+└── .github/
+    ├── FUNDING.yml             # GitHub Sponsors configuration
+    ├── pull_request_template.md # PR template
+    ├── ISSUE_TEMPLATE/
+    │   ├── bug_report.md       # Bug report template
+    │   └── feature_request.md  # Feature request template
+    └── workflows/
+        ├── review_buddy.yml    # ReviewBuddy CI workflow
+        └── auto-release.yml    # Automated release on version bump
 ```
 
 ## 🤝 Contributing
