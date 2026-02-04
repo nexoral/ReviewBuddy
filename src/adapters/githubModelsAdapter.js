@@ -1,12 +1,12 @@
-// src/adapters/openrouterAdapter.js
+// src/adapters/githubModelsAdapter.js
 const { logInfo, logError } = require('../utils');
 
-const name = "OpenRouter";
-const defaultModel = "openrouter/auto"; // Auto-selects best free/cheap model
-const API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const name = "GitHub Models";
+const defaultModel = "openai/gpt-4o"; // Best balance of quality and speed
+const API_URL = "https://models.github.ai/inference/chat/completions";
 
 /**
- * Wraps prompt text into OpenRouter's OpenAI-compatible request body format.
+ * Wraps prompt text into GitHub Models' OpenAI-compatible request body format.
  */
 function buildPayload(promptText, model) {
   return {
@@ -16,13 +16,13 @@ function buildPayload(promptText, model) {
 }
 
 /**
- * Sends a request to the OpenRouter API.
- * @param {string} apiKey - OpenRouter API key
+ * Sends a request to the GitHub Models API.
+ * @param {string} apiKey - GitHub Token
  * @param {object} payload - Request body from buildPayload()
  * @returns {object|null} Parsed JSON response or null on failure
  */
 async function sendRequest(apiKey, payload) {
-  logInfo(`Sending request to OpenRouter (model: ${payload.model})...`);
+  logInfo(`Sending request to GitHub Models (model: ${payload.model})...`);
 
   try {
     const response = await fetch(API_URL, {
@@ -41,13 +41,13 @@ async function sendRequest(apiKey, payload) {
 
     return await response.json();
   } catch (error) {
-    logError(`OpenRouter API request failed: ${error.message}`);
+    logError(`GitHub Models API request failed: ${error.message}`);
     return null;
   }
 }
 
 /**
- * Extracts generated text from OpenRouter's OpenAI-compatible response format.
+ * Extracts generated text from GitHub Models' OpenAI-compatible response format.
  */
 function extractText(response) {
   return response?.choices?.[0]?.message?.content || null;

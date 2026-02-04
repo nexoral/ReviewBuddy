@@ -85,6 +85,7 @@ I built **Review Buddy** to solve this:
 -   **🔌 Multi-Provider Support**:
     -   `gemini` (Default): Google Gemini API (`gemini-3-flash-preview` by default).
     -   `openrouter`: Access 100+ models via OpenRouter (Claude, GPT, Llama, Mistral, etc.).
+    -   `github-models`: Use GitHub Models API with access to OpenAI, Meta, Mistral models and more.
 
 ---
 
@@ -94,12 +95,17 @@ I built **Review Buddy** to solve this:
 | :--- | :--- | :--- | :--- |
 | `github_token` | GitHub Token (use `secrets.GITHUB_TOKEN`) | No | `${{ github.token }}` |
 | `gemini_api_key` | Google Gemini API Key (required for `gemini` adapter) | Conditional | N/A |
-| `openrouter_api_key` | OpenRouter API Key (required for `openrouter` adapter) | Conditional | N/A |
-| `adapter` | AI provider (`gemini` or `openrouter`) | No | `gemini` |
-| `model` | Model name override (e.g., `gemini-2.5-pro`, `anthropic/claude-sonnet-4`) | No | Adapter default |
+| `adaptive_api_token` | Generic API Token for OpenRouter or GitHub Models | Conditional | N/A |
+| `adapter` | AI provider (`gemini`, `openrouter`, or `github-models`) | No | `gemini` |
+| `model` | Model name (optional - smart defaults for each adapter) | No | See below |
 | `tone` | The personality (`professional`, `funny`, `roast`, `friendly`) | No | `roast` |
 | `language` | Language of the review (e.g., `english`, `hinglish`) | No | `hinglish` |
 | `pr_number` | The PR number to process | No | Auto-detected |
+
+**Default Models:**
+- `gemini`: `gemini-3-flash-preview`
+- `openrouter`: `openrouter/auto` (auto-selects best free/cheap model)
+- `github-models`: `openai/gpt-4o`
 
 **Required Permissions**
 To function correctly, the `github_token` needs specific permissions. If using the default `GITHUB_TOKEN`, ensure your workflow YAML includes:
@@ -195,23 +201,78 @@ jobs:
 ### 4. OpenRouter Configuration
 *Use any model via OpenRouter (Claude, GPT, Llama, Mistral, etc.).*
 
+> **🎯 Smart Default:** If you don't specify a model, Review Buddy uses `openrouter/auto` which automatically selects the best free or cheap model for your request!
+
 > **⚠️ Important - Model Selection:**
 > - **Recommended models**: `anthropic/claude-3.5-sonnet`, `google/gemini-2.0-flash-exp:free`, `openai/gpt-4o-mini`, `meta-llama/llama-3.3-70b-instruct`
-> - **Avoid very small models** (< 7B parameters) like `liquid/lfm-2.5-1.2b-instruct:free` - they cannot follow complex JSON structures and will produce broken output
-> - Small models may return `[object Object]` errors, shallow reviews, and fail to update PR titles/descriptions
+> - **Avoid very small models** (< 7B parameters) - they cannot follow complex JSON structures
+> - Small models may return errors, shallow reviews, and fail to update PR titles/descriptions
 
+**With automatic model selection:**
 ```yaml
       - name: Run Review Buddy
         uses: nexoral/ReviewBuddy@main
         with:
           adapter: 'openrouter'
-          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
-          model: 'anthropic/claude-sonnet-4'
+          adaptive_api_token: ${{ secrets.OPENROUTER_API_KEY }}
+          tone: 'roast'
+          language: 'hinglish'
+          # model is optional - will use openrouter/auto
+```
+
+**With specific model:**
+```yaml
+      - name: Run Review Buddy
+        uses: nexoral/ReviewBuddy@main
+        with:
+          adapter: 'openrouter'
+          adaptive_api_token: ${{ secrets.OPENROUTER_API_KEY }}
+          model: 'anthropic/claude-3.5-sonnet'
           tone: 'professional'
           language: 'english'
 ```
 
-### 5. Handling Forked PRs (Open Source)
+### 5. GitHub Models Configuration
+*Use GitHub Models API with your GitHub token. Access OpenAI GPT, Meta Llama, and more!*
+
+> **🆕 New Feature:** GitHub Models provides access to cutting-edge AI models directly through your GitHub token. No separate API key needed!
+> 
+> **🎯 Smart Default:** Uses `openai/gpt-4o` by default - the best balance of quality and speed!
+
+**With default model (gpt-4o):**
+```yaml
+      - name: Run Review Buddy
+        uses: nexoral/ReviewBuddy@main
+        with:
+          adapter: 'github-models'
+          adaptive_api_token: ${{ secrets.GITHUB_TOKEN }}
+          tone: 'roast'
+          language: 'hinglish'
+          # model is optional - will use openai/gpt-4o
+```
+
+**With specific model:**
+```yaml
+      - name: Run Review Buddy
+        uses: nexoral/ReviewBuddy@main
+        with:
+          adapter: 'github-models'
+          adaptive_api_token: ${{ secrets.GITHUB_TOKEN }}
+          model: 'openai/gpt-5'
+          tone: 'roast'
+          language: 'hinglish'
+```
+
+**Available Models:**
+- `openai/gpt-5` - Latest OpenAI (Recommended for best quality)
+- `openai/gpt-4o` - Default, excellent balance (⭐ Default)
+- `openai/gpt-4o-mini` - Fast and efficient
+- `meta-llama/llama-3.3-70b-instruct` - Open source, powerful
+- `mistralai/mistral-large` - Great for code
+
+> **💡 Tip:** You can use the default `GITHUB_TOKEN` or create a personal access token from your [GitHub Settings > Developer settings > Tokens](https://github.com/settings/tokens).
+
+### 6. Handling Forked PRs (Open Source)
 **Important**: PRs from forks have read-only permissions by default. To allow Review Buddy to comment and update descriptions on forked PRs, use `pull_request_target`.
 
 ```yaml
@@ -284,8 +345,13 @@ A: It tells GitHub Actions to use the latest version of the code from the `main`
 
 **For OpenRouter:**
 1.  **Get an OpenRouter API Key**: Visit [OpenRouter](https://openrouter.ai/) and create an API key.
-2.  **Add Secrets**: Add `OPENROUTER_API_KEY` to your repository secrets.
+2.  **Add Secrets**: Add `OPENROUTER_API_KEY` to your repository secrets (or use `ADAPTIVE_API_TOKEN` for a generic approach).
 3.  **Add Workflow**: Use the OpenRouter configuration example above, setting `adapter: 'openrouter'` and your preferred `model`.
+
+**For GitHub Models:**
+1.  **Get GitHub Token**: Your repository already has `GITHUB_TOKEN` available, or create a Personal Access Token from [GitHub Settings](https://github.com/settings/tokens).
+2.  **Add Secrets** (optional): If using a custom token, add it as `GITHUB_TOKEN` or `ADAPTIVE_API_TOKEN` to your repository secrets.
+3.  **Add Workflow**: Use the GitHub Models configuration example above, setting `adapter: 'github-models'` and your preferred `model`.
 
 ---
 
@@ -315,7 +381,8 @@ ReviewBuddy/
 │   └── adapters/
 │       ├── index.js                # Adapter registry & factory
 │       ├── geminiAdapter.js        # Google Gemini API adapter
-│       └── openrouterAdapter.js    # OpenRouter API adapter
+│       ├── openrouterAdapter.js    # OpenRouter API adapter
+│       └── githubModelsAdapter.js  # GitHub Models API adapter
 └── .github/
     ├── FUNDING.yml                 # GitHub Sponsors configuration
     ├── pull_request_template.md    # PR template

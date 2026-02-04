@@ -31,13 +31,25 @@ function getVersion() {
  */
 function resolveApiKey(adapterName, env) {
   const name = (adapterName || 'gemini').toLowerCase();
+  
   if (name === 'openrouter') {
-    if (!env.OPENROUTER_API_KEY) {
-      logError("OPENROUTER_API_KEY is required when adapter is 'openrouter'.");
+    if (!env.ADAPTIVE_API_TOKEN) {
+      logError("ADAPTIVE_API_TOKEN is required when adapter is 'openrouter'.");
       process.exit(1);
     }
-    return env.OPENROUTER_API_KEY;
+    return env.ADAPTIVE_API_TOKEN;
   }
+  
+  if (name === 'github-models' || name === 'github_models') {
+    // GitHub Models uses ADAPTIVE_API_TOKEN or falls back to GITHUB_TOKEN
+    const key = env.ADAPTIVE_API_TOKEN || env.GITHUB_TOKEN;
+    if (!key) {
+      logError("ADAPTIVE_API_TOKEN (or GITHUB_TOKEN) is required when adapter is 'github-models'.");
+      process.exit(1);
+    }
+    return key;
+  }
+  
   // Default: gemini
   if (!env.GEMINI_API_KEY) {
     logError("GEMINI_API_KEY is required when adapter is 'gemini'.");
@@ -587,7 +599,7 @@ async function main() {
     GITHUB_EVENT_NAME: process.env.GITHUB_EVENT_NAME,
     GITHUB_TOKEN: process.env.GITHUB_TOKEN,
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+    ADAPTIVE_API_TOKEN: process.env.ADAPTIVE_API_TOKEN,
     ADAPTER: process.env.ADAPTER,
     MODEL: process.env.MODEL,
     PR_NUMBER: process.env.PR_NUMBER,
