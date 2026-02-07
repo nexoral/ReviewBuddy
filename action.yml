@@ -1,5 +1,5 @@
 name: "Review Buddy AI"
-description: "AI-powered PR assistant that reviews code, updates descriptions, and suggests titles. Supports Gemini, OpenRouter, and GitHub Models."
+description: "AI code reviewer that auto-updates PR titles, descriptions, and labels. Supports multiple AI providers."
 author: "AnkanSaha"
 branding:
   icon: "edit"
