@@ -163,7 +163,7 @@ async function handlePullRequest(env, adapter, apiKey, model) {
 
   // Debug: Log the parsed structure
   logInfo(`🔍 Parsed Keys: ${Object.keys(analysisResults).join(', ')}`);
-  logInfo(`🔍 Field Types: review=${typeof analysisResults.review_comment}, perf=${typeof analysisResults.performance_analysis}, sec=${typeof analysisResults.security_analysis}, qual=${typeof analysisResults.quality_analysis}`);
+  logInfo(`🔍 Field Types: review=${typeof analysisResults.review_comment}, perf=${typeof analysisResults.performance_analysis}, sec=${typeof analysisResults.security_analysis}, qual=${typeof analysisResults.quality_analysis}, best=${typeof analysisResults.best_practices}`);
   logInfo(`📝 Title Type/Value: ${typeof analysisResults.new_title} = ${analysisResults.new_title === null ? 'null' : analysisResults.new_title === undefined ? 'undefined' : `"${analysisResults.new_title}"`}`);
   logInfo(`📝 Description Type: ${typeof analysisResults.new_description} = ${analysisResults.new_description === null ? 'null' : analysisResults.new_description === undefined ? 'undefined' : `${String(analysisResults.new_description).substring(0, 100)}...`}`);
 
@@ -172,6 +172,7 @@ async function handlePullRequest(env, adapter, apiKey, model) {
     performance_analysis,
     security_analysis,
     quality_analysis,
+    best_practices,
     new_title,
     new_description,
     quality_score,
@@ -203,6 +204,7 @@ async function handlePullRequest(env, adapter, apiKey, model) {
   const cleanedPerformance = cleanField(performance_analysis, 'performance_analysis');
   const cleanedSecurity = cleanField(security_analysis, 'security_analysis');
   const cleanedQuality = cleanField(quality_analysis, 'quality_analysis');
+  const cleanedBestPractices = cleanField(best_practices, 'best_practices');
 
   const score = quality_score || 0;
   const mScore = maintainability_score || 0;
@@ -305,8 +307,20 @@ ${footer}`;
     await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
   }
 
-  // Step 6: Smart Labels
-  logInfo("Step 6: Adding smart labels...");
+  // Step 6: Best Practices
+  logInfo("Step 6: Posting best practices suggestions...");
+  if (cleanedBestPractices) {
+    const comment = `<!-- Review Buddy Best Practices -->
+## 💡 Review Buddy - Best Practices & Alternative Suggestions
+> 👥 **Attention:** ${commonMentions}
+
+${cleanedBestPractices}
+${footer}`;
+    await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
+  }
+
+  // Step 7: Smart Labels
+  logInfo("Step 7: Adding smart labels...");
   const finalTitle = (updatePayload.title) || currentTitle;
   const labelsToAdd = determineLabels(finalTitle, mScore, security_analysis, performance_analysis);
 
@@ -316,8 +330,8 @@ ${footer}`;
     logInfo("No labels to add.");
   }
 
-  // Step 7: Final Recommendation
-  logInfo("Step 7: Posting final recommendation...");
+  // Step 8: Final Recommendation
+  logInfo("Step 8: Posting final recommendation...");
   const recData = determineRecommendation(mScore, score, cleanedSecurity, cleanedPerformance, tone, language, verdict);
 
   let recComment = `<!-- Review Buddy Recommendation -->

@@ -11,9 +11,10 @@ Review Buddy automates the boring parts of Code Review:
     *   **PR Title**: Renames your PR to follow Conventional Commits (e.g., `fix: login bug` instead of `update`).
     *   **Description**: Writes a full, formatted description (Summary, Changes, Testing Guide) if you didn't provides one.
     *   **Labels**: Automatically adds relevant labels based on change type, quality score, and detected issues.
-3.  **Engaging Feedback**: comments on your PR in your chosen tone (Professional or Roast).
-4.  **Final Recommendation**: Provides a clear recommendation (Approve/Request Changes/Reject) with actionable next steps for reviewers.
-5.  **Interactive Chat**: Reply to any comment with `/Buddy` (e.g., "Why is this wrong? /Buddy") and Review Buddy will explain!
+3.  **Best Practices Suggestions**: Identifies code patterns that can be improved with modern best practices (e.g., `if (a == undefined)` → `if (!a)`, using `const/let` instead of `var`, arrow functions, template literals, etc.) with before/after examples.
+4.  **Engaging Feedback**: comments on your PR in your chosen tone (Professional or Roast).
+5.  **Final Recommendation**: Provides a clear recommendation (Approve/Request Changes/Reject) with actionable next steps for reviewers.
+6.  **Interactive Chat**: Reply to any comment with `/Buddy` (e.g., "Why is this wrong? /Buddy") and Review Buddy will explain!
 
 ---
 
@@ -68,6 +69,15 @@ I built **Review Buddy** to solve this:
     -   **Quality Score**: `good first review` (90+), `needs work` (<50)
     -   **Security Concerns**: `security` (if Critical/High issues detected)
     -   **Performance Issues**: `performance` (if optimization opportunities found)
+-   **💡 Best Practices Suggestions**: Identifies code patterns that can be improved:
+    -   Loose equality checks (`==`) → Strict equality (`===`)
+    -   `if (a == undefined)` → `if (!a)` or `if (a === undefined)`
+    -   `var` declarations → `const` or `let`
+    -   Traditional functions → Arrow functions (where appropriate)
+    -   Manual string concatenation → Template literals
+    -   Callback hell → `async/await` or Promises
+    -   For loops → Modern array methods (`map`, `filter`, `reduce`)
+    -   Each suggestion includes before/after code examples with explanations
 -   **🎯 Smart PR Recommendations**: Posts a final recommendation comment with:
     -   **✅ APPROVE**: High quality code (80+), no critical issues - ready to merge
     -   **⚠️ REQUEST CHANGES**: Medium quality (40-79) or some concerns - needs improvements
