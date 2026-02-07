@@ -70,19 +70,42 @@ Tasks:
    - Be EXTREMELY detailed (100+ lines)
    - MUST be a string, NOT an array
 
-5. **PR Metadata**:
+5. **Best Practices & Alternative Suggestions** (MUST BE A MARKDOWN STRING):
+   - Use the EXACT Tone (${tone}) and Language (${lang}) specified above
+   - Identify code patterns that can be written better using modern best practices
+   - Examples to look for:
+     * if (a == undefined) → Suggest: if (!a) or if (a === undefined)
+     * if (x == null || x == undefined) → Suggest: if (x == null)
+     * array.length > 0 → Suggest: array.length
+     * for loops → Suggest: forEach, map, filter, reduce
+     * var → Suggest: const/let
+     * function() → Suggest: arrow functions where appropriate
+     * callback hell → Suggest: async/await or Promises
+     * repetitive code → Suggest: extract to function/utility
+     * manual string concatenation → Suggest: template literals
+     * == → Suggest: ===
+     * object[key] === undefined → Suggest: optional chaining (?.)
+   - For EACH suggestion provide:
+     * Current code snippet from the PR
+     * Better alternative with explanation
+     * Why it's better (readability, performance, safety)
+   - Format as markdown with code blocks showing before/after
+   - If no improvements found, say "Code follows best practices" in the specified tone
+   - MUST be a string, NOT an array
+
+6. **PR Metadata**:
    - Check if current title follows Conventional Commits
    - If title is GOOD, return null for new_title
    - ONLY suggest new_title if it's vague or violates conventions
    - Generate comprehensive PR description (Markdown) with Summary, Changes, Verification
    - If needsDesc is "true", provide new_description. If "false", return null
 
-6. **Overall Benchmark Score (0-100)**:
+7. **Overall Benchmark Score (0-100)**:
    - Calculate comprehensive maintainability score
    - Weigh: Code Quality (30%), Security (25%), Performance (25%), Maintainability (20%)
    - Scoring: 90-100 Excellent, 70-89 Good, 50-69 Needs Improvement, 0-49 Poor
 
-7. **Verdict**:
+8. **Verdict**:
    - Consider PERSPECTIVE and PURPOSE of changes
    - Evaluate ACTUAL impact and risk
    - Verdict: "APPROVE", "REQUEST_CHANGES", or "REJECT"
@@ -99,6 +122,7 @@ Output JSON with this EXACT structure:
   "performance_analysis": "<markdown string - 100+ lines>",
   "security_analysis": "<markdown string - comprehensive>",
   "quality_analysis": "<markdown string - 100+ lines>",
+  "best_practices": "<markdown string with before/after code examples>",
   "new_title": "<string or null>",
   "new_description": "<markdown string or null>",
   "quality_score": <number 1-10>,
