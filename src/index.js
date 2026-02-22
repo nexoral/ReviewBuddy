@@ -10,7 +10,7 @@ const { getAdapter } = require('./adapters');
 const { constructReviewPromptText } = require('./prompts/reviewPrompt');
 const { constructChatPromptText } = require('./prompts/chatPrompt');
 const {
-  fetchPRDetails, fetchPRDiff, postComment, updatePR, addLabels,
+  fetchPRDetails, fetchPRDiff, postComment, postOrUpdateComment, updatePR, addLabels,
   fetchPRComments, updateComment
 } = require('./github');
 
@@ -261,7 +261,7 @@ async function handlePullRequest(env, adapter, apiKey, model) {
 
 ${cleanedReview}
 ${footer}`;
-    await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
+    await postOrUpdateComment(GITHUB_REPOSITORY, prNumber, comment, '<!-- Review Buddy Start -->', GITHUB_TOKEN);
   }
 
   // Step 3: Performance
@@ -273,7 +273,7 @@ ${footer}`;
 
 ${cleanedPerformance}
 ${footer}`;
-    await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
+    await postOrUpdateComment(GITHUB_REPOSITORY, prNumber, comment, '<!-- Review Buddy Performance -->', GITHUB_TOKEN);
   }
 
   // Step 4: Security
@@ -285,7 +285,7 @@ ${footer}`;
 
 ${cleanedSecurity}
 ${footer}`;
-    await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
+    await postOrUpdateComment(GITHUB_REPOSITORY, prNumber, comment, '<!-- Review Buddy Security -->', GITHUB_TOKEN);
   }
 
   // Step 5: Quality
@@ -304,7 +304,7 @@ ${footer}`;
 
 ${cleanedQuality}
 ${footer}`;
-    await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
+    await postOrUpdateComment(GITHUB_REPOSITORY, prNumber, comment, '<!-- Review Buddy Quality -->', GITHUB_TOKEN);
   }
 
   // Step 6: Best Practices
@@ -316,7 +316,7 @@ ${footer}`;
 
 ${cleanedBestPractices}
 ${footer}`;
-    await postComment(GITHUB_REPOSITORY, prNumber, comment, GITHUB_TOKEN);
+    await postOrUpdateComment(GITHUB_REPOSITORY, prNumber, comment, '<!-- Review Buddy Best Practices -->', GITHUB_TOKEN);
   }
 
   // Step 7: Smart Labels
@@ -374,7 +374,7 @@ ${recData.reasoning}
   }
 
   recComment += footer;
-  await postComment(GITHUB_REPOSITORY, prNumber, recComment, GITHUB_TOKEN);
+  await postOrUpdateComment(GITHUB_REPOSITORY, prNumber, recComment, '<!-- Review Buddy Recommendation -->', GITHUB_TOKEN);
 
   logSuccess("All tasks finished successfully!");
 }

@@ -80,6 +80,30 @@ async function postComment(repo, prNum, body, token) {
   }
 }
 
+/**
+ * Posts or updates a comment based on a unique marker.
+ * If a comment with the marker exists, updates it; otherwise creates a new one.
+ */
+async function postOrUpdateComment(repo, prNum, body, marker, token) {
+  if (!body) return;
+
+  logInfo(`Checking for existing comment with marker: ${marker}...`);
+
+  // Fetch all comments
+  const comments = await fetchPRComments(repo, prNum, token);
+
+  // Find existing comment with this marker
+  const existingComment = comments.find(c => c.body && c.body.includes(marker));
+
+  if (existingComment) {
+    logInfo(`Found existing comment (ID: ${existingComment.id}). Updating...`);
+    await updateComment(repo, existingComment.id, body, token);
+  } else {
+    logInfo(`No existing comment found. Creating new comment...`);
+    await postComment(repo, prNum, body, token);
+  }
+}
+
 async function updatePR(repo, prNum, payload, token) {
   if (!payload || Object.keys(payload).length === 0) return;
 
@@ -193,6 +217,7 @@ module.exports = {
   fetchPRDetails,
   fetchPRDiff,
   postComment,
+  postOrUpdateComment,
   updatePR,
   addLabels,
   fetchPRComments,
