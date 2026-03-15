@@ -1,0 +1,153 @@
+# ReviewBuddy Core Rules for Cursor IDE
+
+## Project Context
+
+**ReviewBuddy** - AI-powered code review GitHub Action (JavaScript, Node.js ≥18.0.0)
+
+## Mandatory Workflows
+
+```bash
+npm install          # Install dependencies
+npm test            # Run tests
+npm run lint        # ESLint check
+node src/index.js   # Local testing (requires env vars)
+```
+
+## Definition of "Done"
+
+- ✅ Code follows adapter pattern
+- ✅ All secrets masked with `core.setSecret()`
+- ✅ Input validation implemented
+- ✅ Error handling with `core.setFailed()`
+- ✅ Rate limiting and retries
+- ✅ Tests pass (if exist)
+- ✅ README.md updated
+- ✅ action.yml updated
+- ✅ No hardcoded credentials
+
+## Architecture
+
+```
+GitHub PR Event → Parse Inputs → Fetch PR Details → Select AI Adapter → Generate Review → Post Comments → Update PR
+```
+
+## Components
+
+```
+src/ (index.js, adapters/, prompts/, github/, utils/)
+action.yml (GitHub Action metadata)
+```
+
+## GitHub Actions Standards
+
+### Inputs/Outputs
+```javascript
+// ✅ Use @actions/core
+const token = core.getInput('github-token', { required: true });
+core.setOutput('review-result', result);
+
+// ✅ Use core.setFailed for errors
+try {
+  await reviewPR();
+} catch (error) {
+  core.setFailed(error.message);
+}
+```
+
+### Security
+```javascript
+// ✅ ALWAYS: Mask secrets
+const apiKey = core.getInput('gemini-api-key', { required: true });
+core.setSecret(apiKey);
+
+// ❌ NEVER: Log credentials
+console.log(`API Key: ${apiKey}`); // FORBIDDEN
+```
+
+### Type Safety (JSDoc)
+```javascript
+/**
+ * @param {string} code - Source code to review
+ * @param {object} context - GitHub context
+ * @returns {Promise<object>} Review result
+ */
+async function generateReview(code, context) {}
+```
+
+## Key Patterns
+
+### Adapter Pattern (AI Providers)
+```javascript
+class AIAdapter {
+  async generateReview(code, context) {
+    throw new Error('Not implemented');
+  }
+}
+
+class GeminiAdapter extends AIAdapter {
+  async generateReview(code, context) {
+    // Gemini-specific implementation
+  }
+}
+
+const adapters = {
+  gemini: new GeminiAdapter(),
+  openrouter: new OpenRouterAdapter(),
+  github: new GitHubModelsAdapter()
+};
+```
+
+### Personas
+```javascript
+const personas = {
+  roast: "Brutally honest, sarcastic",
+  professional: "Senior engineer, detailed",
+  funny: "Comedian-style, humorous",
+  friendly: "Supportive mentor"
+};
+```
+
+### Error Handling (Exponential Backoff)
+```javascript
+async function callAI(prompt, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await api.generate(prompt);
+    } catch (error) {
+      if (error.status === 429) {
+        await sleep(Math.pow(2, i) * 1000);
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+```
+
+## Testing
+
+```javascript
+jest.mock('@actions/core');
+jest.mock('@actions/github');
+
+test('should generate review', async () => {
+  core.getInput.mockReturnValue('gemini');
+  const result = await generateReview(mockContext);
+  expect(result).toHaveProperty('suggestions');
+});
+```
+
+## Anti-Patterns
+
+❌ Hardcoded credentials
+❌ Synchronous operations (use Promise.all)
+❌ No retry logic
+❌ Logging secrets
+
+## Success
+
+- ✅ Builds
+- ✅ Tests pass
+- ✅ Secrets masked
+- ✅ Docs updated
+- ✅ action.yml valid

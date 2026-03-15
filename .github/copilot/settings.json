@@ -1,0 +1,64 @@
+{
+  "version": "1.0",
+  "project": {
+    "name": "ReviewBuddy",
+    "type": "GitHub Action",
+    "language": "JavaScript",
+    "runtime": "Node.js ≥18.0.0"
+  },
+  "build": {
+    "command": "npm install && npm run lint",
+    "required": true
+  },
+  "test": {
+    "command": "npm test",
+    "required": false
+  },
+  "instructions": [
+    "CRITICAL: All API keys must be masked with core.setSecret()",
+    "CRITICAL: Use core.setFailed() for action failures",
+    "CRITICAL: Implement adapter pattern for AI providers",
+    "CRITICAL: No hardcoded credentials or tokens",
+    "Always validate inputs from core.getInput()",
+    "Implement exponential backoff for rate limits",
+    "Use Promise.all() for parallel operations",
+    "Set timeouts (30-60s) for AI API calls",
+    "Update action.yml for input/output changes",
+    "Update README.md for user-facing changes",
+    "Mock @actions/core and @actions/github in tests",
+    "Use octokit for all GitHub API interactions"
+  ],
+  "patterns": {
+    "adapters": {
+      "description": "Pluggable AI provider adapters",
+      "providers": ["gemini", "openrouter", "github"],
+      "interface": ["generateReview", "generateTitle", "suggestLabels"]
+    },
+    "personas": {
+      "description": "Adaptive review styles",
+      "options": ["roast", "professional", "funny", "friendly"]
+    },
+    "errorHandling": {
+      "description": "Retry with exponential backoff",
+      "required": true
+    }
+  },
+  "antiPatterns": [
+    "Never log API keys or tokens",
+    "Never use hardcoded credentials",
+    "Never use sequential operations (use parallel)",
+    "Never skip input validation",
+    "Never throw errors without core.setFailed()"
+  ],
+  "completionCriteria": {
+    "required": [
+      "npm install passes",
+      "npm run lint passes",
+      "npm test passes (if tests exist)",
+      "All secrets masked",
+      "action.yml updated",
+      "README.md updated",
+      "No hardcoded credentials"
+    ]
+  }
+}

@@ -1,0 +1,67 @@
+# OpenAI Codex CLI Configuration for ReviewBuddy
+
+[project]
+name = "ReviewBuddy"
+description = "AI-powered code review GitHub Action"
+language = "JavaScript"
+runtime = "Node.js ≥18.0.0"
+
+[model]
+default = "gpt-4-turbo"
+temperature = 0.2
+
+[build]
+command = "npm install && npm run lint"
+required = true
+
+[test]
+command = "npm test"
+required = false
+
+[rules]
+adapter_pattern = true
+secrets_masked = true
+input_validation = true
+rate_limiting = true
+parallel_operations = true
+
+[rules.security]
+mask_secrets = true
+validate_inputs = true
+sanitize_data = true
+no_hardcoded_credentials = true
+
+[rules.github_actions]
+use_actions_core = true
+use_actions_github = true
+set_failed_on_error = true
+set_secret_for_keys = true
+
+[rules.performance]
+parallel_file_review = true
+timeout_handling = true
+exponential_backoff = true
+minimize_api_calls = true
+
+[documentation]
+update_action_yml = true
+update_readme = true
+jsdoc_comments = true
+
+[antipatterns]
+no_hardcoded_secrets = true
+no_sequential_operations = true
+no_missing_validation = true
+no_unmasked_logs = true
+
+[completion]
+required = [
+  "npm install passes",
+  "npm run lint passes",
+  "npm test passes (if tests exist)",
+  "All secrets masked with core.setSecret()",
+  "action.yml updated",
+  "README.md updated",
+  "Adapter pattern implemented",
+  "Rate limiting with backoff"
+]
