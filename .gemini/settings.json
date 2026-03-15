@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "project": {
+    "name": "ReviewBuddy",
+    "type": "GitHub Action",
+    "language": "JavaScript",
+    "runtime": "Node.js ≥18.0.0"
+  },
+  "context": {
+    "fileName": ["GEMINI.md", "action.yml", "README.md"],
+    "hierarchical": true
+  },
+  "tools": {
+    "enabled": ["codeSearch", "fileOperations", "shellCommands"]
+  }
+}
