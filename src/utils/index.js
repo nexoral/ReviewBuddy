@@ -41,8 +41,7 @@ function validateEnv(adapterName) {
   if (!process.env.GITHUB_TOKEN && !process.env.INPUT_GITHUB_TOKEN) missing.push('GITHUB_TOKEN');
 
   if (missing.length > 0) {
-    logError(`Missing required environment variables: ${missing.join(', ')}`);
-    process.exit(1);
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
 
   return process.env;
@@ -92,27 +91,57 @@ function determineLabels(title, maintainabilityScore, securityAnalysis, performa
 function determineRecommendation(maintainabilityScore, qualityScore, securityAnalysis, performanceAnalysis, tone, language, verdict) {
   const score = parseInt(maintainabilityScore, 10) || 0;
 
-  // Use Gemini's structured verdict if available
+  const hasCriticalSecurity = (securityAnalysis && /\*?\*?Severity\*?\*?:\s*Critical/i.test(securityAnalysis)) ||
+                              (verdict && verdict.has_critical_security === true);
+  const hasHighSecurity = (securityAnalysis && /\*?\*?Severity\*?\*?:\s*High/i.test(securityAnalysis)) ||
+                          (verdict && verdict.has_high_security === true);
+
   let status;
   let aiReasoning;
-  if (verdict && verdict.status) {
-    // Normalize Gemini's status to our display format
-    const verdictStatus = verdict.status.toUpperCase().replace('_', ' ');
-    if (verdictStatus === "REJECT") status = "REJECT";
-    else if (verdictStatus === "REQUEST CHANGES" || verdictStatus === "REQUEST_CHANGES") status = "REQUEST CHANGES";
-    else status = "APPROVE";
+
+  // Normalize incoming status from verdict if available
+  let rawStatus = "";
+  if (verdict && typeof verdict.status === 'string') {
+    rawStatus = verdict.status.toUpperCase().trim().replace(/_/g, ' ');
+  }
+
+  let parsedStatus = null;
+  if (["APPROVE", "APPROVED", "SUCCESS", "PASS", "GOOD", "LGTM"].includes(rawStatus)) {
+    parsedStatus = "APPROVE";
+  } else if (["REJECT", "REJECTED", "FAIL", "DECLINE", "DECLINED", "BLOCKED"].includes(rawStatus)) {
+    parsedStatus = "REJECT";
+  } else if ([
+    "REQUEST CHANGES", "REQUESTING CHANGES", "CHANGES REQUESTED", 
+    "REVIEW NEEDED", "REVIEW_NEEDED", "NEEDS WORK", "NEEDS_WORK", "COMMENT"
+  ].includes(rawStatus)) {
+    parsedStatus = "REQUEST CHANGES";
+  }
+
+  // Validate and override logic based on benchmarks
+  if (parsedStatus) {
+    if (parsedStatus === "APPROVE") {
+      if (hasCriticalSecurity || score < 40) {
+        status = "REJECT";
+      } else if (hasHighSecurity || score < 60) {
+        status = "REQUEST CHANGES";
+      } else {
+        status = "APPROVE";
+      }
+    } else if (parsedStatus === "REQUEST CHANGES") {
+      if (hasCriticalSecurity || score < 40) {
+        status = "REJECT";
+      } else {
+        status = "REQUEST CHANGES";
+      }
+    } else {
+      status = "REJECT";
+    }
 
     aiReasoning = Array.isArray(verdict.reasoning)
       ? verdict.reasoning.map(r => `- ${r}`).join('\n')
       : null;
   } else {
-    // Fallback: heuristic-based (legacy behavior, improved)
-    // Only flag critical/high if they appear as actual severity labels in structured context
-    const hasCriticalSecurity = securityAnalysis &&
-      /\*\*?Severity\*?\*?:\s*Critical/i.test(securityAnalysis);
-    const hasHighSecurity = securityAnalysis &&
-      /\*\*?Severity\*?\*?:\s*High/i.test(securityAnalysis);
-
+    // Fallback: heuristic-based
     if (hasCriticalSecurity || score < 40) {
       status = "REJECT";
     } else if (hasHighSecurity || score < 60) {

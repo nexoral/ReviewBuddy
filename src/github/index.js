@@ -22,7 +22,7 @@ async function fetchPRDetails(repo, prNum, token) {
     return await response.json();
   } catch (error) {
     logError(`Failed to fetch PR details: ${error.message}`);
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -133,26 +133,43 @@ async function updatePR(repo, prNum, payload, token) {
 }
 
 async function fetchPRComments(repo, prNum, token) {
-  const url = `https://api.github.com/repos/${repo}/issues/${prNum}/comments?per_page=100`;
   logInfo(`Fetching PR comments for #${prNum}...`);
+  let comments = [];
+  let page = 1;
+  const perPage = 100;
 
   try {
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `token ${token}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'ReviewBuddy-Action'
+    while (true) {
+      const url = `https://api.github.com/repos/${repo}/issues/${prNum}/comments?per_page=${perPage}&page=${page}`;
+      logInfo(`Fetching page ${page} of comments...`);
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'ReviewBuddy-Action'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    });
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const pageComments = await response.json();
+      if (!Array.isArray(pageComments) || pageComments.length === 0) {
+        break;
+      }
+
+      comments = comments.concat(pageComments);
+      if (pageComments.length < perPage) {
+        break;
+      }
+      page++;
     }
-
-    return await response.json();
+    return comments;
   } catch (error) {
     logWarning(`Failed to fetch PR comments: ${error.message}`);
-    return [];
+    return comments;
   }
 }
 

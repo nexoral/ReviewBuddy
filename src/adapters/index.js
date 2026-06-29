@@ -22,8 +22,7 @@ function getAdapter(adapterName) {
   const adapter = adapters[key];
 
   if (!adapter) {
-    logError(`Unknown adapter: "${adapterName}". Supported adapters: ${Object.keys(adapters).join(', ')}`);
-    process.exit(1);
+    throw new Error(`Unknown adapter: "${adapterName}". Supported adapters: ${Object.keys(adapters).join(', ')}`);
   }
 
   return adapter;

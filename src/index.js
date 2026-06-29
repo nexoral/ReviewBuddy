@@ -34,8 +34,7 @@ function resolveApiKey(adapterName, env) {
   
   if (name === 'openrouter') {
     if (!env.ADAPTIVE_API_TOKEN) {
-      logError("ADAPTIVE_API_TOKEN is required when adapter is 'openrouter'.");
-      process.exit(1);
+      throw new Error("ADAPTIVE_API_TOKEN is required when adapter is 'openrouter'.");
     }
     return env.ADAPTIVE_API_TOKEN;
   }
@@ -44,16 +43,14 @@ function resolveApiKey(adapterName, env) {
     // GitHub Models uses ADAPTIVE_API_TOKEN or falls back to GITHUB_TOKEN
     const key = env.ADAPTIVE_API_TOKEN || env.GITHUB_TOKEN;
     if (!key) {
-      logError("ADAPTIVE_API_TOKEN (or GITHUB_TOKEN) is required when adapter is 'github-models'.");
-      process.exit(1);
+      throw new Error("ADAPTIVE_API_TOKEN (or GITHUB_TOKEN) is required when adapter is 'github-models'.");
     }
     return key;
   }
   
   // Default: gemini
   if (!env.GEMINI_API_KEY) {
-    logError("GEMINI_API_KEY is required when adapter is 'gemini'.");
-    process.exit(1);
+    throw new Error("GEMINI_API_KEY is required when adapter is 'gemini'.");
   }
   return env.GEMINI_API_KEY;
 }
@@ -123,7 +120,7 @@ async function handlePullRequest(env, adapter, apiKey, model) {
   const diff = await fetchPRDiff(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN);
   if (!diff) {
     logInfo("Diff is empty. Nothing to review.");
-    process.exit(0);
+    return;
   }
 
   const truncatedDiff = diff.substring(0, 100000); // 100k char limit
@@ -136,14 +133,12 @@ async function handlePullRequest(env, adapter, apiKey, model) {
   const response = await adapter.sendRequest(apiKey, payload, model);
 
   if (!response) {
-    logError(`Failed to get response from ${adapter.name}.`);
-    process.exit(1);
+    throw new Error(`Failed to get response from ${adapter.name}.`);
   }
 
   const generatedText = adapter.extractText(response);
   if (!generatedText) {
-    logError(`Empty response from ${adapter.name}.`);
-    process.exit(1);
+    throw new Error(`Empty response from ${adapter.name}.`);
   }
 
   logInfo(`✅ AI Response Length: ${generatedText.length} characters`);
@@ -158,7 +153,7 @@ async function handlePullRequest(env, adapter, apiKey, model) {
   } catch (e) {
     logError(`Failed to parse JSON response: ${e.message}`);
     logInfo(`Raw text (first 500 chars): ${generatedText.substring(0, 500)}`);
-    process.exit(1);
+    throw new Error(`Failed to parse JSON response: ${e.message}`);
   }
 
   // Debug: Log the parsed structure
@@ -384,8 +379,7 @@ async function handleIssueComment(env, adapter, apiKey, model) {
 
   const eventPath = process.env.GITHUB_EVENT_PATH;
   if (!fs.existsSync(eventPath)) {
-    logError(`Event payload not found at ${eventPath}`);
-    process.exit(1);
+    throw new Error(`Event payload not found at ${eventPath}`);
   }
 
   const eventData = JSON.parse(fs.readFileSync(eventPath, 'utf8'));
@@ -396,18 +390,18 @@ async function handleIssueComment(env, adapter, apiKey, model) {
 
   if (!issueNumber) {
     logWarning("Could not find issue number in payload. Exiting.");
-    process.exit(0);
+    return;
   }
 
   if (!isPr) {
     logInfo("This comment is not on a Pull Request. Skipping.");
-    process.exit(0);
+    return;
   }
 
   // Check for /buddy command
   if (!/\/buddy/i.test(commentBody)) {
     logInfo("No '/Buddy' command found. Skipping.");
-    process.exit(0);
+    return;
   }
 
   logInfo(`Command '/Buddy' detected in comment by @${commentAuthor}.`);
@@ -490,14 +484,12 @@ async function handleIssueComment(env, adapter, apiKey, model) {
   const response = await adapter.sendRequest(apiKey, payload, model);
 
   if (!response) {
-    logError(`Failed to get response from ${adapter.name}.`);
-    process.exit(1);
+    throw new Error(`Failed to get response from ${adapter.name}.`);
   }
 
   const generatedText = adapter.extractText(response);
   if (!generatedText) {
-    logError(`Empty response from ${adapter.name}.`);
-    process.exit(1);
+    throw new Error(`Empty response from ${adapter.name}.`);
   }
 
   // Parse the JSON response
@@ -525,10 +517,23 @@ async function handleIssueComment(env, adapter, apiKey, model) {
   if (verdictChanged && updatedVerdict && recommendationCommentId) {
     logInfo(`Verdict changed to: ${updatedVerdict.status}. Updating recommendation comment...`);
 
-    const newStatus = updatedVerdict.status.toUpperCase().replace('_', ' ');
+    let newStatus = updatedVerdict.status.toUpperCase().replace(/_/g, ' ').trim();
+    if (["APPROVE", "APPROVED", "SUCCESS", "PASS", "GOOD", "LGTM"].includes(newStatus)) {
+      newStatus = "APPROVE";
+    } else if (["REJECT", "REJECTED", "FAIL", "DECLINE", "DECLINED", "BLOCKED"].includes(newStatus)) {
+      newStatus = "REJECT";
+    } else if ([
+      "REQUEST CHANGES", "REQUESTING CHANGES", "CHANGES REQUESTED", 
+      "REVIEW NEEDED", "REVIEW_NEEDED", "NEEDS WORK", "NEEDS_WORK", "COMMENT"
+    ].includes(newStatus)) {
+      newStatus = "REQUEST CHANGES";
+    } else {
+      newStatus = "APPROVE"; // default fallback
+    }
+
     let newIcon = "✅";
     if (newStatus === "REJECT") newIcon = "🚫";
-    else if (newStatus === "REQUEST CHANGES" || newStatus === "REQUEST_CHANGES") newIcon = "⚠️";
+    else if (newStatus === "REQUEST CHANGES") newIcon = "⚠️";
 
     const newReasoning = Array.isArray(updatedVerdict.reasoning)
       ? updatedVerdict.reasoning.map(r => `- ${r}`).join('\n')
@@ -637,8 +642,7 @@ async function main() {
 
   // Validate model is set (OpenRouter requires explicit model)
   if (!model) {
-    logError(`Model is required for the '${adapterName}' adapter. Please set the 'model' input.`);
-    process.exit(1);
+    throw new Error(`Model is required for the '${adapterName}' adapter. Please set the 'model' input.`);
   }
 
   if (env.GITHUB_EVENT_NAME === 'pull_request' || env.GITHUB_EVENT_NAME === 'pull_request_target') {
@@ -651,7 +655,7 @@ async function main() {
     await handleIssueComment(env, adapter, apiKey, model);
   } else {
     logWarning(`Unsupported event: ${env.GITHUB_EVENT_NAME}`);
-    process.exit(0);
+    return;
   }
 }
 
