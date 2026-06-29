@@ -1,3 +1,14 @@
+jest.mock('../src/utils', () => {
+  const original = jest.requireActual('../src/utils');
+  return {
+    ...original,
+    logInfo: jest.fn(),
+    logSuccess: jest.fn(),
+    logWarning: jest.fn(),
+    logError: jest.fn()
+  };
+});
+
 const { determineLabels, determineRecommendation, validateEnv } = require('../src/utils');
 
 describe('determineLabels', () => {
