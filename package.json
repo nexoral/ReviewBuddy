@@ -1,0 +1,16 @@
+{
+  "name": "reviewbuddy",
+  "version": "1.0.0",
+  "description": "AI-powered code reviews for pull requests",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "jest",
+    "test:coverage": "jest --coverage"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
