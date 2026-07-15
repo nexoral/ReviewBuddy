@@ -17,3 +17,4 @@ jobs:
           adapter: ${{ secrets.ADAPTER }}
           model: ${{ secrets.MODEL }}
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          adaptive_api_token: ${{ secrets.ADAPTIVE_API_TOKEN }}
