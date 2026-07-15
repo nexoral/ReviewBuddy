@@ -42,9 +42,11 @@ jobs:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
 ```
 
-> **💰 Cost-Efficient**: Review Buddy makes only **ONE** AI API call per PR to generate the complete review report (code analysis, suggestions, description, labels, and recommendation). No expensive multi-call workflows—just fast, affordable AI reviews!
+> **💰 Cost-Efficient**: Small PRs get reviewed in a **single** AI call. Large PRs automatically split into a bounded per-file review (hard-capped file count, budget-aware) instead of one giant prompt — cost scales predictably, never unbounded.
 >
-> **🔌 Multi-Provider**: Supports **Gemini** (default) and **OpenRouter** (access 100+ models). Bring your own API key and model!
+> **🧠 Full-Repo Context**: Review Buddy checks out your repo and reviews full-file, import-aware context — not just a bare diff — so it doesn't hallucinate architecture from 3 lines of surrounding code.
+>
+> **🔌 Multi-Provider**: Supports **Gemini** (default), **OpenRouter** (access 100+ models), and **GitHub Models**. Bring your own API key and model!
 >
 > **🚀 Simple & Smart**: Just add one API key with a small config file, and your Repo PR becomes smarter!
 
@@ -62,6 +64,9 @@ I built **Review Buddy** to solve this:
 
 ## 🚀 Features
 
+-   **🧠 Full-Repo Context Awareness**: Instead of reviewing a bare diff (3 lines of context per change), Review Buddy checks out your repo and builds a full-file, import-aware view of every changed file — plus a one-hop "repo map" of the local files it imports — so the AI reasons from real code and architecture, not fragments.
+-   **📈 Scales to Massive PRs**: Small PRs are reviewed in one AI call. Large PRs (or PRs that exceed your model's context window) automatically split into a per-file map step + one synthesis step, with a hard cap on files reviewed per run and bounded concurrency — cost and reliability stay predictable regardless of PR or repo size. Lockfiles, `dist/`, `node_modules/`, and other generated/binary files are filtered out automatically.
+-   **💬 Smarter `/buddy` Follow-ups**: Replies reuse the review sections already posted (no re-sending the whole diff every time) — but if you push new commits after the review ran, Review Buddy detects that and fetches just the incremental change, so it's never arguing from stale code.
 -   **📝 Auto-Documentation**: Automatically writes a detailed PR description (Summary + Changes + Testing) if the original is lacking.
 -   **🏷️ Smart Retitling**: Detects the nature of changes and renames the PR to be semantic (e.g., `fix:`, `feat:`, `chore:`).
 -   **🏷️ Intelligent Label Management**: Automatically adds relevant labels based on:
@@ -84,7 +89,7 @@ I built **Review Buddy** to solve this:
     -   **🚫 REJECT**: Critical security issues or very low quality (<40) - major fixes required
     -   Includes reasoning, review checklist, and clear next steps for reviewers
 -   **💬 Adaptive Persona**:
-    -   `roast` (Default): A fun, "senior dev" persona that playfully roasts bad code.
+    -   `roast` (Default): Matches intensity to severity — clean code gets genuine praise ("Shabash!"), minor issues get calm Hinglish teaching, and real bugs/security holes get the full savage roast. Not everything gets roasted equally.
     -   `professional`: Helpful, clean, and mentorship-focused.
     -   `funny`: Adds humor using emojis and light jokes.
     -   `friendly`: Encouraging and kind.
@@ -342,6 +347,15 @@ The recommendation is posted as a final comment with detailed reasoning and next
 **Q: Can I dispute Review Buddy's verdict?**
 A: Yes! Reply with `/buddy` and explain your reasoning (e.g., "/buddy this is a config-only change, the security concerns don't apply here"). Review Buddy will re-evaluate the verdict based on your explanation and the full conversation context, and **update the original recommendation comment** if warranted.
 
+**Q: Does it review the whole repository, or just the diff?**
+A: It reviews the diff, but with full context: Review Buddy checks out your repo and reads the complete content of every changed file (not just the changed lines), plus a one-hop map of the local files each changed file imports. This is what lets it catch architecture-level issues instead of guessing from a 3-line diff hunk.
+
+**Q: If I push new commits after the review already ran, does `/buddy` know about them?**
+A: Yes. Review Buddy tracks which commit it last reviewed. If you push new commits and then comment `/buddy`, it detects the mismatch and fetches just the incremental diff since the last review, alongside the earlier findings — it won't reply based on stale code.
+
+**Q: What happens on a huge PR that touches hundreds of files?**
+A: Review Buddy splits the review per-file (with bounded concurrency and a per-run file cap) instead of sending one massive prompt, then synthesizes the results into a single report. If a PR exceeds the cap, or the synthesis step itself would overflow the model's context, the lowest-priority items are dropped and called out transparently in the posted comment rather than silently ignored.
+
 **Q: What does `@main` mean in `uses: ...@main`?**
 A: It tells GitHub Actions to use the latest version of the code from the `main` branch. For production stability, you may want to use a specific tag (e.g., `@v1.0.0`) once released.
 
@@ -372,7 +386,8 @@ Verified Source Code structure for contributors:
 
 ```
 ReviewBuddy/
-├── action.yml                      # GitHub Action definition & metadata
+├── action.yml                      # GitHub Action definition & metadata (includes its own checkout step)
+├── package.json                    # Dependencies & test scripts (npm test = jest)
 ├── VERSION                         # Current version tracker
 ├── LICENSE                         # MIT License
 ├── README.md                       # Documentation
@@ -381,19 +396,31 @@ ReviewBuddy/
 ├── SECURITY.md                     # Security policy
 ├── SUPPORT.md                      # Support documentation
 ├── src/
-│   ├── index.js                    # Entry point & orchestration logic
+│   ├── index.js                    # Entry point & orchestration logic (single-pass + map-reduce)
 │   ├── github/
 │   │   └── index.js                # GitHub API interactions (PR, comments, labels)
 │   ├── utils/
-│   │   └── index.js                # Utilities (logging, scoring, recommendations)
+│   │   ├── index.js                # Logging, scoring, recommendations
+│   │   ├── gitContext.js           # Local git diff/full-file/repo-map context (fails soft to API diff)
+│   │   ├── contextBudget.js        # Per-model token budget + merge-step size guard
+│   │   └── concurrency.js          # Bounded-concurrency map helper for large PRs
 │   ├── prompts/
-│   │   ├── reviewPrompt.js         # PR review prompt text (provider-agnostic)
-│   │   └── chatPrompt.js           # Chat reply prompt text (provider-agnostic)
+│   │   ├── reviewPrompt.js         # Single-pass PR review prompt
+│   │   ├── fileReviewPrompt.js     # Per-file review prompt (map phase)
+│   │   ├── mergeReviewPrompt.js    # Synthesis prompt (reduce phase)
+│   │   ├── chatPrompt.js           # /buddy chat reply prompt
+│   │   └── toneInstructions.js     # Shared tone/language guidance
 │   └── adapters/
 │       ├── index.js                # Adapter registry & factory
 │       ├── geminiAdapter.js        # Google Gemini API adapter
 │       ├── openrouterAdapter.js    # OpenRouter API adapter
 │       └── githubModelsAdapter.js  # GitHub Models API adapter
+├── tests/                          # Jest unit tests (run with `npm test`)
+│   ├── utils.test.js
+│   ├── github.test.js
+│   ├── gitContext.test.js
+│   ├── contextBudget.test.js
+│   └── concurrency.test.js
 └── .github/
     ├── FUNDING.yml                 # GitHub Sponsors configuration
     ├── pull_request_template.md    # PR template
@@ -410,7 +437,7 @@ ReviewBuddy/
 Contributions are welcome! Please ensure you:
 1.  Fork the repo.
 2.  Modify the scripts in `src/`.
-3.  Test locally if possible.
+3.  Run `npm install` then `npm test` (Jest) to verify nothing broke.
 4.  Submit a PR (Review Buddy will likely roast it!).
 
 ## 📄 License
