@@ -9,6 +9,11 @@ const {
 const { getAdapter } = require('./adapters');
 const { constructReviewPromptText } = require('./prompts/reviewPrompt');
 const { constructChatPromptText } = require('./prompts/chatPrompt');
+const { constructFileReviewPromptText } = require('./prompts/fileReviewPrompt');
+const { constructMergeReviewPromptText } = require('./prompts/mergeReviewPrompt');
+const { getLocalDiff, buildRepoMap, splitDiffByFile } = require('./utils/gitContext');
+const { getDiffCharBudget, fitFindingsToBudget } = require('./utils/contextBudget');
+const { mapWithConcurrency } = require('./utils/concurrency');
 const {
   fetchPRDetails, fetchPRDiff, postComment, postOrUpdateComment, updatePR, addLabels,
   fetchPRComments, updateComment
@@ -85,7 +90,8 @@ async function handlePullRequest(env, adapter, apiKey, model) {
     PR_NUMBER,
     GITHUB_TOKEN,
     TONE,
-    LANGUAGE
+    LANGUAGE,
+    MODEL_CONTEXT_TOKENS
   } = env;
 
   const prNumber = PR_NUMBER;
@@ -116,29 +122,124 @@ async function handlePullRequest(env, adapter, apiKey, model) {
     logWarning(`Description is too short (${currentBody.length} chars). Marking for update.`);
   }
 
-  // Fetch Diff
-  const diff = await fetchPRDiff(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN);
-  if (!diff) {
+  // Fetch Diff — prefer local git (full-context, filtered, budget-aware);
+  // fall back to the GitHub API diff (3-line hunks) if git is unavailable.
+  const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+  const localDiff = getLocalDiff({ repoRoot, baseSha: prJson.base.sha, headSha: prJson.head.sha, contextLines: 50 });
+
+  let diffText;
+  let skippedFiles = [];
+
+  if (localDiff) {
+    diffText = localDiff.diff;
+    skippedFiles = localDiff.skipped;
+    logInfo(`Local diff: ${localDiff.files.length} reviewable file(s), ${skippedFiles.length} skipped (lockfiles/generated/binary).`);
+  } else {
+    diffText = (await fetchPRDiff(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN)) || '';
+  }
+
+  if (!diffText) {
     logInfo("Diff is empty. Nothing to review.");
     return;
   }
 
-  const truncatedDiff = diff.substring(0, 100000); // 100k char limit
+  const charBudget = getDiffCharBudget(MODEL_CONTEXT_TOKENS);
+  const fileChunks = splitDiffByFile(diffText);
+  const useMapReduce = diffText.length > charBudget || fileChunks.length > 6;
 
   // Generate AI Content
-  logInfo("Generating analysis...");
+  logInfo(`Generating analysis (${useMapReduce ? `map-reduce, ${fileChunks.length} files` : 'single-pass'})...`);
 
-  const promptText = constructReviewPromptText(truncatedDiff, currentTitle, prAuthor, tone, language, String(needsDescUpdate));
-  const payload = adapter.buildPayload(promptText, model);
-  const response = await adapter.sendRequest(apiKey, payload, model);
+  let generatedText;
 
-  if (!response) {
-    throw new Error(`Failed to get response from ${adapter.name}.`);
-  }
+  if (!useMapReduce) {
+    const promptText = constructReviewPromptText(diffText, currentTitle, prAuthor, tone, language, String(needsDescUpdate));
+    const payload = adapter.buildPayload(promptText, model);
+    const response = await adapter.sendRequest(apiKey, payload, model);
 
-  const generatedText = adapter.extractText(response);
-  if (!generatedText) {
-    throw new Error(`Empty response from ${adapter.name}.`);
+    if (!response) {
+      throw new Error(`Failed to get response from ${adapter.name}.`);
+    }
+
+    generatedText = adapter.extractText(response);
+    if (!generatedText) {
+      throw new Error(`Empty response from ${adapter.name}.`);
+    }
+  } else {
+    // Hard ceilings so a massive PR (not just a massive repo) still costs a
+    // bounded, predictable number of requests instead of scaling unbounded
+    // with file count.
+    const MAX_FILES_PER_RUN = 40;
+    const MAP_CONCURRENCY = 8;
+
+    let reviewChunks = fileChunks;
+    if (fileChunks.length > MAX_FILES_PER_RUN) {
+      reviewChunks = fileChunks.slice(0, MAX_FILES_PER_RUN);
+      const overflow = fileChunks.slice(MAX_FILES_PER_RUN).map(c => `${c.file} (PR too large — not reviewed this run, ${MAX_FILES_PER_RUN}-file cap)`);
+      skippedFiles = skippedFiles.concat(overflow);
+      logWarning(`PR touches ${fileChunks.length} reviewable files; capping at ${MAX_FILES_PER_RUN} this run, ${fileChunks.length - MAX_FILES_PER_RUN} skipped.`);
+    }
+
+    const repoMap = localDiff ? buildRepoMap(repoRoot, prJson.head.sha, localDiff.files) : {};
+
+    const rawResults = await mapWithConcurrency(reviewChunks, MAP_CONCURRENCY, async ({ file, chunk }) => {
+      const boundedChunk = chunk.length > charBudget
+        ? chunk.substring(0, charBudget) + '\n... (diff truncated, this file exceeds the per-request budget)'
+        : chunk;
+
+      const promptText = constructFileReviewPromptText({
+        file, diffChunk: boundedChunk, repoMapForFile: repoMap[file],
+        title: currentTitle, author: prAuthor, tone, lang: language
+      });
+      const payload = adapter.buildPayload(promptText, model);
+      const response = await adapter.sendRequest(apiKey, payload, model);
+      if (!response) {
+        logWarning(`No response reviewing ${file}, skipping it in the final review.`);
+        return null;
+      }
+      const text = adapter.extractText(response);
+      if (!text) {
+        logWarning(`Empty response reviewing ${file}, skipping it in the final review.`);
+        return null;
+      }
+      try {
+        return JSON.parse(extractJson(text));
+      } catch (e) {
+        logWarning(`Failed to parse per-file result for ${file}: ${e.message}`);
+        return null;
+      }
+    });
+
+    let perFileResults = rawResults.filter(Boolean);
+
+    if (perFileResults.length === 0) {
+      throw new Error(`Failed to get any valid per-file review from ${adapter.name}.`);
+    }
+
+    // The reduce call is one request too — keep it in budget by dropping the
+    // lowest-severity per-file results first if a huge PR still overflows it.
+    const fitted = fitFindingsToBudget(perFileResults, charBudget);
+    perFileResults = fitted.kept;
+    if (fitted.dropped.length > 0) {
+      logWarning(`Merge step input exceeded budget; omitted ${fitted.dropped.length} lower-severity file result(s) from final synthesis.`);
+      skippedFiles = skippedFiles.concat(fitted.dropped.map(f => `${f} (reviewed, but omitted from final synthesis due to PR size)`));
+    }
+
+    const mergePromptText = constructMergeReviewPromptText({
+      perFileResults, title: currentTitle, author: prAuthor, tone, lang: language,
+      needsDesc: String(needsDescUpdate), skippedFiles
+    });
+    const mergePayload = adapter.buildPayload(mergePromptText, model);
+    const mergeResponse = await adapter.sendRequest(apiKey, mergePayload, model);
+
+    if (!mergeResponse) {
+      throw new Error(`Failed to get merge response from ${adapter.name}.`);
+    }
+
+    generatedText = adapter.extractText(mergeResponse);
+    if (!generatedText) {
+      throw new Error(`Empty merge response from ${adapter.name}.`);
+    }
   }
 
   logInfo(`✅ AI Response Length: ${generatedText.length} characters`);
@@ -330,6 +431,7 @@ ${footer}`;
   const recData = determineRecommendation(mScore, score, cleanedSecurity, cleanedPerformance, tone, language, verdict);
 
   let recComment = `<!-- Review Buddy Recommendation -->
+<!-- Review Buddy Reviewed SHA: ${prJson.head.sha} -->
 ## ${recData.icon} Review Buddy - Final Recommendation
 > 👥 **Attention:** ${commonMentions}
 
@@ -423,22 +525,27 @@ async function handleIssueComment(env, adapter, apiKey, model) {
   const currentTitle = prJson.title || "";
   const prAuthor = prJson.user ? prJson.user.login : "";
 
-  // Fetch Diff
-  let diff = await fetchPRDiff(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN);
-  if (!diff) {
-    logWarning("Diff is empty. Proceeding without diff context.");
-    diff = "No diff available.";
-  }
-  const truncatedDiff = diff.substring(0, 50000);
-
   // Fetch all PR comments for conversation context
   logInfo("Fetching conversation history...");
   const allComments = await fetchPRComments(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN);
 
-  // Build conversation history string and find the recommendation comment
+  // Build conversation history string, find the recommendation comment, and
+  // reuse the already-posted review sections (priorFindings) instead of
+  // re-fetching/re-sending the full diff on every /buddy reply.
+  const FINDING_MARKERS = {
+    general: '<!-- Review Buddy Start -->',
+    performance: '<!-- Review Buddy Performance -->',
+    security: '<!-- Review Buddy Security -->',
+    quality: '<!-- Review Buddy Quality -->',
+    best_practices: '<!-- Review Buddy Best Practices -->'
+  };
+  const MAX_FINDING_SECTION_CHARS = 8000;
+
   let conversationHistory = "";
   let recommendationCommentId = null;
   let currentVerdict = null;
+  let reviewedSha = null;
+  const priorFindings = {};
 
   for (const c of allComments) {
     const body = c.body || "";
@@ -451,11 +558,24 @@ async function handleIssueComment(env, adapter, apiKey, model) {
       // Extract current verdict status from the comment
       const statusMatch = body.match(/### Recommendation: \*\*(.+?)\*\*/);
       const reasoningMatch = body.match(/### Reasoning:\n([\s\S]*?)(?=\n---|\n###)/);
+      const shaMatch = body.match(/<!-- Review Buddy Reviewed SHA: ([0-9a-f]{7,40}) -->/);
       if (statusMatch) {
         currentVerdict = {
           status: statusMatch[1],
           reasoning: reasoningMatch ? reasoningMatch[1].trim() : ""
         };
+      }
+      if (shaMatch) {
+        reviewedSha = shaMatch[1];
+      }
+    }
+
+    // Capture the already-posted review sections once each (first match wins)
+    for (const [key, marker] of Object.entries(FINDING_MARKERS)) {
+      if (!priorFindings[key] && body.includes(marker)) {
+        priorFindings[key] = body.length > MAX_FINDING_SECTION_CHARS
+          ? body.substring(0, MAX_FINDING_SECTION_CHARS) + "..."
+          : body;
       }
     }
 
@@ -474,12 +594,41 @@ async function handleIssueComment(env, adapter, apiKey, model) {
     logInfo(`Current verdict: ${currentVerdict.status}`);
   }
 
+  // Only fetch the full diff when no prior review has run yet (no findings
+  // to reuse) — this is the fallback path, not the common case.
+  let diff = null;
+  if (Object.keys(priorFindings).length === 0) {
+    logInfo("No prior Review Buddy findings on this PR, fetching diff as fallback context...");
+    diff = (await fetchPRDiff(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN)) || "No diff available.";
+    diff = diff.substring(0, 50000);
+  }
+
+  // If new commits landed after the reviewed SHA, priorFindings alone is
+  // stale — fetch just the incremental diff (reviewedSha -> current head)
+  // so the reply/verdict re-evaluation actually sees the new code.
+  let newChangesDiff = null;
+  const hasNewCommits = !!(reviewedSha && prJson.head.sha && reviewedSha !== prJson.head.sha);
+  if (hasNewCommits) {
+    logInfo(`New commits detected since last review (${reviewedSha.substring(0, 7)} -> ${prJson.head.sha.substring(0, 7)}). Fetching incremental diff...`);
+    const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+    const incremental = getLocalDiff({ repoRoot, baseSha: reviewedSha, headSha: prJson.head.sha, contextLines: 50 });
+    if (incremental) {
+      newChangesDiff = incremental.diff || null;
+    } else {
+      // Local git unavailable — best-effort fallback to the full current diff.
+      newChangesDiff = (await fetchPRDiff(GITHUB_REPOSITORY, prNumber, GITHUB_TOKEN)) || null;
+    }
+    if (newChangesDiff) {
+      newChangesDiff = newChangesDiff.substring(0, 50000);
+    }
+  }
+
   // Generate Reply with full context
   logInfo("Generating context-aware reply...");
-  const promptText = constructChatPromptText(
-    truncatedDiff, currentTitle, prAuthor, commentBody, commentAuthor,
-    tone, language, conversationHistory, currentVerdict
-  );
+  const promptText = constructChatPromptText({
+    title: currentTitle, author: prAuthor, comment: commentBody, commentAuthor,
+    tone, lang: language, conversationHistory, currentVerdict, priorFindings, diff, newChangesDiff
+  });
   const payload = adapter.buildPayload(promptText, model);
   const response = await adapter.sendRequest(apiKey, payload, model);
 
@@ -542,6 +691,7 @@ async function handleIssueComment(env, adapter, apiKey, model) {
     const commonMentions = `@${prAuthor}`;
 
     let updatedRecComment = `<!-- Review Buddy Recommendation -->
+<!-- Review Buddy Reviewed SHA: ${prJson.head.sha} -->
 ## ${newIcon} Review Buddy - Final Recommendation (Updated)
 > 👥 **Attention:** ${commonMentions}
 
@@ -621,6 +771,7 @@ async function main() {
     ADAPTIVE_API_TOKEN: process.env.ADAPTIVE_API_TOKEN,
     ADAPTER: process.env.ADAPTER,
     MODEL: process.env.MODEL,
+    MODEL_CONTEXT_TOKENS: process.env.MODEL_CONTEXT_TOKENS,
     PR_NUMBER: process.env.PR_NUMBER,
     TONE: process.env.TONE,
     LANGUAGE: process.env.LANGUAGE

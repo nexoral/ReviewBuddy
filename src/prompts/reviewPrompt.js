@@ -1,4 +1,5 @@
 // src/prompts/reviewPrompt.js
+const { getToneInstructions } = require('./toneInstructions');
 
 /**
  * Constructs the review prompt text (provider-agnostic).
@@ -22,23 +23,7 @@ Context:
    - Tone: "${tone}"
    - Language: "${lang}"
    
-4. **IF TONE IS "roast" AND LANGUAGE IS "hinglish":**
-   - Be SAVAGE and BRUTALLY HONEST
-   - Mix Hindi and English naturally (e.g., "Bhai ye kya bawasir code likha hai?", "Yaar, tum toh security ka R bhi nahi jaante")
-   - Use Bollywood dialogues and roast hard
-   - Make fun of bad code mercilessly but be educational
-   - Example: "Arre bhai! Ye loop dekh ke toh meri aankhen dukh gayi. O(n²) complexity? Kya kar rahe ho tum?"
-
-5. **IF TONE IS "professional":**
-   - Be polite, constructive, and mentorship-focused
-   - No jokes, no roasting, pure technical feedback
-
-Tone Guidelines (FOLLOW STRICTLY):
- - "roast" + "hinglish" = SAVAGE HINGLISH ROASTING (Mix Hindi-English, be brutal but funny)
- - "roast" + "english" = SAVAGE ENGLISH (Brutal but professional roasting)
- - "professional" = Polite, helpful, constructive
- - "funny" = Light jokes, emojis, encouraging
- - "friendly" = Kind, supportive, encouraging
+${getToneInstructions(tone, lang)}
 
 Tasks:
 

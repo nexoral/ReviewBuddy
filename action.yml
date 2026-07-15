@@ -23,6 +23,9 @@ inputs:
   model:
     description: "Model name to use (optional - each adapter has smart defaults)"
     required: false
+  model_context_tokens:
+    description: "Context window size (in tokens) of the selected model. Used to size how much diff content is sent per request/whether to split large PRs across multiple requests. Defaults to a conservative 32000 if not set."
+    required: false
   pr_number:
     description: "Pull Request Number"
     required: true
@@ -43,6 +46,12 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Checkout repository (for local diff context)
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+        token: ${{ inputs.github_token }}
+
     - name: Run Review Buddy
       shell: bash
       env:
@@ -51,6 +60,7 @@ runs:
         ADAPTIVE_API_TOKEN: ${{ inputs.adaptive_api_token }}
         ADAPTER: ${{ inputs.adapter }}
         MODEL: ${{ inputs.model }}
+        MODEL_CONTEXT_TOKENS: ${{ inputs.model_context_tokens }}
         PR_NUMBER: ${{ inputs.pr_number }}
         GITHUB_REPOSITORY: ${{ inputs.repository }}
         TONE: ${{ inputs.tone }}

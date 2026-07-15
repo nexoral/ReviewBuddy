@@ -108,6 +108,7 @@ I built **Review Buddy** to solve this:
 | `adaptive_api_token` | Generic API Token for OpenRouter or GitHub Models | Conditional | N/A |
 | `adapter` | AI provider (`gemini`, `openrouter`, or `github-models`) | No | `gemini` |
 | `model` | Model name (optional - smart defaults for each adapter) | No | See below |
+| `model_context_tokens` | Context window (in tokens) of your chosen model. Lets Review Buddy size/split large diffs correctly for any model instead of guessing. | No | `32000` |
 | `tone` | The personality (`professional`, `funny`, `roast`, `friendly`) | No | `roast` |
 | `language` | Language of the review (e.g., `english`, `hinglish`) | No | `hinglish` |
 | `pr_number` | The PR number to process | No | Auto-detected |
